@@ -1,0 +1,121 @@
+/* ============================================================
+   微信读书 掌机外壳 — UI v6「App 化」
+
+   ⚠️ 铁律不变：正文是 <canvas> 绘制，站方 JS 读容器 computed
+   style 算分页 ⇒ 绝不动 .readerChapterContent/.preRenderContent
+   的 width/padding/font-size/line-height/letter-spacing/text-align。
+   本版所有改动只作用于 书架/导航/弹层 等非 canvas 区域。
+
+   v6 目标：去掉网页痕迹（标题栏/推广条/大 tab/滚动条），
+   做出原生 App 的视觉质感（圆角卡片/阴影/胶囊导航/焦点辉光）。
+   ============================================================ */
+
+/* ---------- 1. 网页痕迹清除 ---------- */
+/* 网页式标题栏（"微信读书首页 传书到手机 墨水屏版"） */
+.navBar,
+.navBar_border { display: none !important; }
+/* 抵消标题栏占位（站方用 padding-top 撑开）——隐藏后内容上移 */
+.app_content_navBarOffset { padding-top: 0 !important; margin-top: 0 !important; }
+/* "下载微信读书 App 管理书架" 推广条 */
+.shelf_download_app,
+.shelf_download_app_link { display: none !important; }
+[class*="downloadGuide"],
+[class*="appPromotionBanner"],
+[class*="openAppButton"],
+[class*="topBanner"] { display: none !important; }
+/* OverflowScrollbars 库画的桌面滚动条（App 没有可见滚动条） */
+.os-scrollbar { display: none !important; }
+::-webkit-scrollbar { width: 0 !important; height: 0 !important; }
+
+/* ---------- 2. 顶部导航：网页大 tab → App 分段控件 ---------- */
+#wr-hh-nav {
+  background: linear-gradient(180deg, #fbfbfc 0%, #f2f3f5 100%) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05) !important;
+}
+#wr-hh-nav .wr-hh-tab {
+  border-radius: 20px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  font-weight: 500 !important;
+  color: #5a6472 !important;
+  transition: none !important;
+}
+#wr-hh-nav .wr-hh-tab.on {
+  background: #ffffff !important;
+  color: #1f2329 !important;
+  font-weight: 600 !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.10), 0 0 1px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* ---------- 3. 焦点态：App 式辉光 ---------- */
+.wr-hh-focus {
+  outline: 2px solid #2f6fd0 !important;
+  outline-offset: -2px !important;
+  border-radius: 20px !important;
+  background: rgba(47, 111, 208, 0.14) !important;
+  box-shadow: 0 0 0 3px rgba(47, 111, 208, 0.18) !important;
+  transition: none !important;
+  animation: none !important;
+}
+/* 书籍卡片上的焦点：贴卡片圆角，不放大不位移（布局零干预） */
+.shelfBook.wr-hh-focus,
+.wr-hh-focus.shelfBook {
+  outline: 3px solid #2f6fd0 !important;
+  outline-offset: 2px !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+}
+
+/* ---------- 4. 书架：白底网页 → 沉浸式书架 ---------- */
+/* 书架整体底色：暖纸灰（更像阅读 App 的书架）
+   ⚠️ 必须限定 h5 页面：阅读器 body 是 .wr_page_reader，
+      绝不能改它的底色（需跟随阅读主题，深色/护眼等）。 */
+.wr_page_shelf { background: #f4f2ee !important; }
+body.wr-hh-has-nav { background: #f4f2ee !important; }
+/* 书封：圆角 + 投影（App 书架标配） */
+.shelfBook .wr_bookCover img,
+.shelfBook img[class*="cover"],
+.shelfBook img {
+  border-radius: 6px !important;
+  box-shadow: 0 2px 8px rgba(60, 50, 40, 0.22), 0 0 1px rgba(0, 0, 0, 0.12) !important;
+}
+/* "微信读书首页"里的卡片同样圆角化 */
+.wr_index_mini_shelf_card { border-radius: 12px !important; }
+
+/* ---------- 5. 阅读器：只做视觉，不动布局 ---------- */
+/* 右侧工具栏浮层：贴右边缘显示（不做 overflow/圆角，避免裁切内部）
+   站方原值 right:-80px ⇒ 手柄选不中，必须拉回。 */
+.readerControls.readerControls {
+  right: 0 !important;
+}
+
+/* ---------- 6. 通用弹层 App 化（菜单/设置面板） ---------- */
+[id*="modal"] , [class*="Modal"], [class*="modal"] {
+  border-radius: 12px !important;
+}
+
+/* ---------- 7. 扩展自绘组件 App 化（掌机菜单/屏幕键盘） ---------- */
+/* 掌机菜单：底部浮起卡片式，代替贴边直角条 */
+#wr-hh-menu {
+  border-radius: 16px 16px 0 0 !important;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.25) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+}
+#wr-hh-menu > * {
+  border-radius: 10px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+#wr-hh-menu > .wr-hh-focus,
+#wr-hh-menu .wr-hh-focus {
+  background: rgba(47, 111, 208, 0.35) !important;
+  outline: 2px solid rgba(120, 170, 255, 0.9) !important;
+  outline-offset: -2px !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+/* 屏幕键盘容器（若存在 id 前缀 wr-hh-kbd） */
+[id^="wr-hh-kbd"] {
+  border-radius: 14px 14px 0 0 !important;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.25) !important;
+}

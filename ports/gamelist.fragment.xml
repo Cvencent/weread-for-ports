@@ -1,0 +1,7 @@
+<game>
+  <path>./Weread.sh</path>
+  <name>微信读书</name>
+  <desc>微信读书掌机版，面向 Ports 掌机优化的无触屏阅读客户端。支持手柄导航、书架与发现、阅读翻页、目录、搜索和字号设置，登录状态保存在本机。</desc>
+  <image>./media/Weread.png</image>
+  <genre>阅读工具</genre>
+</game>

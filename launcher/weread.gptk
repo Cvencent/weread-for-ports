@@ -1,0 +1,40 @@
+# =====================================================
+#  微信读书 掌机版 —— 手柄映射 v6
+#
+#  ⚠️ 必须配合 SDL_GAMECONTROLLERCONFIG_FILE 才生效
+#     （方向键走 hat 直通；按钮走 SDL 名字）
+#     node.sh 已把它指向【ES 那份】db（A/B 与硬件一致）
+#
+#  ⚠️ gptk 里【没有】start/select 条目 = 它们不做任何事；
+#     而 START+SELECT 是 gptokeyb 内建的"杀进程"组合，
+#     与这里的映射无关（所以退出始终可用）。
+# =====================================================
+
+# 十字键 = 方向键（阅读器内=翻页；书架/首页=移动焦点；长按连发）
+up    = up
+down  = down
+left  = left
+right = right
+up    = repeat
+down  = repeat
+left  = repeat
+right = repeat
+
+# A = 确定    B = 返回
+a     = enter
+b     = esc
+
+# X = 目录    Y = 空格
+x     = tab
+y     = space
+
+# L1/R1 = 上一页 / 下一页
+l1    = pageup
+r1    = pagedown
+
+# ⭐ L2 = 掌机菜单（目录 / 设置 / 搜索 / 上一页 / 书架 / 退出）
+#    没有它的话，浏览页无法唤出菜单 ⇒【搜索功能物理不可达】（实测发现）
+l2    = f10
+
+# R2 = 跳到页面底部 / 下一章
+r2    = end
