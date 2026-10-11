@@ -90,11 +90,23 @@ class PerformanceContractTests(unittest.TestCase):
         # A wrong contain-intrinsic-size makes the scrollbar jump as cards
         # enter and leave the viewport, so each type gets its rendered size.
         css = (ROOT / "extension/shell.css").read_text(encoding="utf-8")
-        self.assertIn("contain-intrinsic-size: 143px 174px;", css)
         self.assertIn("contain-intrinsic-size: 298px 154px;", css)
         self.assertIn("contain-intrinsic-size: 298px 136px;", css)
         self.assertIn("contain-intrinsic-size: 144px 48px;", css)
         self.assertNotIn("contain-intrinsic-size: 160px 200px;", css)
+
+    def test_virtualisation_never_contradicts_the_card_rules(self):
+        # The shelf card rule pins content-visibility to visible !important so
+        # move() keeps measuring real boxes. An `auto` on .shelfBook was
+        # silently overridden by that rule, so the shelf was never virtualised
+        # and the placeholder it declared was dead weight.
+        css = (ROOT / "extension/shell.css").read_text(encoding="utf-8")
+        perf = css.split("body.wr-hh-perf")[1].split("/* v8 shell")[0]
+        self.assertNotIn(".shelfBook", perf)
+        self.assertNotIn(".shelfArchive", perf)
+        self.assertNotIn("143px 174px", css)
+        # The rule that actually wins must stay in place.
+        self.assertIn("content-visibility: visible !important", css)
 
 if __name__ == "__main__":
     unittest.main()
