@@ -255,6 +255,12 @@ body.wr-hh-searching .navBar { display: block !important; position: fixed !impor
   display: flex !important; flex-direction: column; justify-content: space-between; z-index: 1000 !important;
   opacity: 0 !important; pointer-events: none !important;
 }
+/* The bridge keeps this attribute set while it dispatches a click at the site's
+   invisible reader toolbar. It is a holder count, not a flag: several actions
+   can be in flight at once, and the toolbar must stay clickable until the last
+   one finishes, so any value of the attribute enables pointer events. */
+.readerControls.readerControls[data-wr-hh-native-input-holders] { pointer-events: auto !important; }
+/* Kept for a bridge that has not been updated yet. */
 .readerControls.readerControls[data-wr-hh-native-input] { pointer-events: auto !important; }
 .readerControls.readerControls > .wr_tooltip_container { flex: none; margin: 0 !important; }
 .readerControls.readerControls .readerControls_item { width: 40px !important; height: 40px !important; margin: 0 !important; }

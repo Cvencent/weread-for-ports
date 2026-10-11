@@ -7,11 +7,32 @@ import sys
 
 # cdp.py ships next to this file and is also copied into the browser directory
 # that the launcher uses; accept either location so a partial update still works.
-for _candidate in ("/storage/roms/ports/browser", os.path.dirname(os.path.abspath(__file__))):
-    if os.path.isfile(os.path.join(_candidate, "cdp.py")):
-        sys.path.insert(0, _candidate)
-        break
-import cdp
+#
+# Load it by path rather than by pushing a directory onto sys.path. Putting it
+# back afterwards leaves the interpreter exactly as it was, and the plain
+# `import cdp` fallback keeps working when the module is already on the path.
+import importlib.util as _importlib_util
+
+
+def _load_cdp():
+    for _candidate in ("/storage/roms/ports/browser",
+                       os.path.dirname(os.path.abspath(__file__))):
+        _path = os.path.join(_candidate, "cdp.py")
+        if not os.path.isfile(_path):
+            continue
+        _spec = _importlib_util.spec_from_file_location("cdp", _path)
+        if _spec is None or _spec.loader is None:
+            continue
+        _module = _importlib_util.module_from_spec(_spec)
+        _sys_modules = sys.modules.get("cdp")
+        _spec.loader.exec_module(_module)
+        sys.modules["cdp"] = _module
+        return _module
+    import cdp as _module          # already importable: use it as-is
+    return _module
+
+
+cdp = _load_cdp()
 
 
 SELECTORS = {
@@ -44,6 +65,59 @@ def point_expression(selector):
     })()""" % json.dumps(selector)
 
 
+# The data- prefix is part of the attribute name: the stylesheet matches it as
+# [data-wr-hh-native-input-holders], so setAttribute must use the same name.
+NATIVE_INPUT_MARK = "data-wr-hh-native-input-holders"
+
+
+# The expressions are kept as plain strings so the tests can run the exact
+# shipped JavaScript in a real browser instead of a paraphrase of it.
+HOLD_NATIVE_INPUT = """(function(){
+  var root=document.querySelector('.readerControls');
+  if(!root) return 0;
+  var n=parseInt(root.getAttribute(%(mark)s)||'0',10)+1;
+  root.setAttribute(%(mark)s,String(n));
+  return n;
+})()""" % {"mark": json.dumps(NATIVE_INPUT_MARK)}
+
+RELEASE_NATIVE_INPUT = """(function(){
+  var root=document.querySelector('.readerControls');
+  if(!root) return 0;
+  var n=parseInt(root.getAttribute(%(mark)s)||'0',10)-1;
+  if(n>0){root.setAttribute(%(mark)s,String(n));return n;}
+  root.removeAttribute(%(mark)s);
+  return 0;
+})()""" % {"mark": json.dumps(NATIVE_INPUT_MARK)}
+
+
+def _hold_native_input_source():
+    """The exact JavaScript the bridge sends to take a reference."""
+    return HOLD_NATIVE_INPUT
+
+
+def _release_native_input_source():
+    """The exact JavaScript the bridge sends to drop a reference."""
+    return RELEASE_NATIVE_INPUT
+
+
+def _hold_native_input(ws, mid):
+    """Take a reference on the attribute that makes the site toolbar clickable.
+
+    The server is threaded, so several actions can be in flight at once and
+    they all share one document attribute. A plain set/remove pair is only safe
+    by luck of timing: clear it while another action sits between mousePressed
+    and mouseReleased and that click is dispatched against a toolbar with
+    pointer-events disabled, which is the "X does nothing" symptom this
+    attribute exists to prevent. Count the holders instead, and only clear the
+    attribute once the last one lets go.
+    """
+    ws.call(mid, "Runtime.evaluate", {"expression": HOLD_NATIVE_INPUT})
+
+
+def _release_native_input(ws, mid):
+    ws.call(mid, "Runtime.evaluate", {"expression": RELEASE_NATIVE_INPUT})
+
+
 def click_action(action):
     target = cdp.pick_page_target()
     if not target.get("url", "").startswith("https://weread.qq.com/"):
@@ -51,7 +125,7 @@ def click_action(action):
     ws = cdp.WS(target["webSocketDebuggerUrl"])
     try:
         if action in ("catalog", "settings"):
-            ws.call(0, "Runtime.evaluate", {"expression": "document.querySelector('.readerControls')?.setAttribute('data-wr-hh-native-input','1')"})
+            _hold_native_input(ws, 0)
         expression = point_expression(SELECTORS[action])
         if action in ("font-previous", "font-next"):
             expression = """(function(){
@@ -111,7 +185,7 @@ def click_action(action):
         # would make the invisible toolbar swallow the next tap.
         if action in ("catalog", "settings"):
             try:
-                ws.call(5, "Runtime.evaluate", {"expression": "document.querySelector('.readerControls')?.removeAttribute('data-wr-hh-native-input')"})
+                _release_native_input(ws, 5)
             except (OSError, ValueError, KeyError, RuntimeError):
                 pass
         ws.close()
