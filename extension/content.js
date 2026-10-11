@@ -1007,20 +1007,33 @@
   /* The page turners are the most repeated lookup in the reader (Y / L1 / R1).
      The original code scanned every span,div,a,button in the document and read
      innerText on each hit, and innerText forces a rendered-text layout read per
-     element. A match must be a leaf holding exactly the label text, so the
-     lookup prunes with a widened tag set plus :empty and compares textContent,
-     which never triggers layout. The tag list is a superset of the original
-     four tags, so the set of elements that can match is unchanged. */
-  var PAGE_LABEL_SEL =
-    'span,div,a,button,em,strong,i,label,p,li,cite,figcaption,section,img,hr,h1,h2,h3,h4,h5,h6,u,s,small,center,output,summary,legend,caption,figcaption,dt,dd,th,td,code,kbd,samp,var,q,abbr,sub,sup,mark,time,data,bdi,bdo,ruby,rt,rp';
+     element.
+
+     A match is a leaf element whose whole text is exactly the label, so the
+     lookup prunes on a widened tag list and then reads textContent, which never
+     forces layout. The children check has to happen before the text comparison:
+     textContent on a container returns the concatenated text of every
+     descendant, so without it the enclosing wrapper matches first and the click
+     lands on the wrapper instead of the page turner.
+
+     Do NOT reach for :empty here. It only matches elements with no child nodes
+     at all, so a real label (which is a text node) never matches it, and
+     appending it to a comma-separated list silently applies to the last branch
+     only. Both were verified against real Chromium.
+
+     The tag list stays exactly the original span,div,a,button. Widening it was
+     tried and reverted: it is not a superset, it also matches elements the
+     original could never find, which changes what gets clicked. */
+  var PAGE_LABEL_SEL = 'span,div,a,button';
   function pageBtn(dir) {
     var want = dir === 'next' ? '下一页' : '上一页';
     if (pCache[dir] && pCache[dir].isConnected && shown(pCache[dir])) return pCache[dir];
-    /* A label match cannot contain elements, so ":empty" prunes every container
-       before the text comparison, and textContent needs no layout. */
-    var els = document.querySelectorAll(PAGE_LABEL_SEL + ':empty');
+    var els = document.querySelectorAll(PAGE_LABEL_SEL);
     for (var i = 0; i < els.length; i++) {
       var e = els[i];
+      /* Only leaves can hold the label alone. This also keeps textContent from
+         collecting the text of every descendant of a wrapper. */
+      if (e.children.length) continue;
       if (mine(e)) continue;
       if ((e.textContent || '').trim() !== want) continue;
       if (!shown(e)) continue;
