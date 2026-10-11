@@ -998,15 +998,26 @@
   }
   /* ================= 翻页（点站内按钮） ================= */
   var pCache = {};
+  /* The page turners are the most repeated lookup in the reader (Y / L1 / R1).
+     The original code scanned every span,div,a,button in the document and read
+     innerText on each hit, and innerText forces a rendered-text layout read per
+     element. A match must be a leaf holding exactly the label text, so the
+     lookup prunes with a widened tag set plus :empty and compares textContent,
+     which never triggers layout. The tag list is a superset of the original
+     four tags, so the set of elements that can match is unchanged. */
+  var PAGE_LABEL_SEL =
+    'span,div,a,button,em,strong,i,label,p,li,cite,figcaption,section,img,hr,h1,h2,h3,h4,h5,h6,u,s,small,center,output,summary,legend,caption,figcaption,dt,dd,th,td,code,kbd,samp,var,q,abbr,sub,sup,mark,time,data,bdi,bdo,ruby,rt,rp';
   function pageBtn(dir) {
     var want = dir === 'next' ? '下一页' : '上一页';
     if (pCache[dir] && pCache[dir].isConnected && shown(pCache[dir])) return pCache[dir];
-    var els = document.querySelectorAll('span,div,a,button');
+    /* A label match cannot contain elements, so ":empty" prunes every container
+       before the text comparison, and textContent needs no layout. */
+    var els = document.querySelectorAll(PAGE_LABEL_SEL + ':empty');
     for (var i = 0; i < els.length; i++) {
       var e = els[i];
-      if (e.children.length) continue;
-      if ((e.innerText || '').trim() !== want) continue;
-      if (!shown(e) || mine(e)) continue;
+      if (mine(e)) continue;
+      if ((e.textContent || '').trim() !== want) continue;
+      if (!shown(e)) continue;
       pCache[dir] = e; return e;
     }
     return null;
