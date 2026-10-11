@@ -1309,7 +1309,7 @@
            dialogs; shown() then reuses the same rect instead of reading twice. */
         if (!el.isConnected || mine(el)) continue;
         var r = rc(el);
-        if (r.width < 60 || r.height < 60) continue;
+        if (r.width <= 60 || r.height <= 60) continue;
         if (r.left >= innerWidth - 20 || r.right <= 20) continue;
         if (!shownSized(el, r)) continue;
         return el;
