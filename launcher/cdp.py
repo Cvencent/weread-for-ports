@@ -78,9 +78,20 @@ class WS:
             raise RuntimeError("handshake failed")
 
     def send(self, text):
-        data = text.encode("utf-8")
-        header = bytearray([0x81])
-        size = len(data)
+        self._send_frame(0x1, text.encode("utf-8"))
+
+    def _read(self, count):
+        buffer = b""
+        while len(buffer) < count:
+            chunk = self.sock.recv(count - len(buffer))
+            if not chunk:
+                raise IOError("closed")
+            buffer += chunk
+        return buffer
+
+    def _send_frame(self, opcode, payload):
+        header = bytearray([0x80 | opcode])
+        size = len(payload)
         if size < 126:
             header.append(0x80 | size)
         elif size < 65536:
@@ -91,29 +102,58 @@ class WS:
             header += struct.pack(">Q", size)
         mask = os.urandom(4)
         header += mask
-        self.sock.sendall(bytes(header) + bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
+        self.sock.sendall(bytes(header)
+                          + bytes(b ^ mask[i % 4] for i, b in enumerate(payload)))
 
     def recv(self):
-        def read(count):
-            buffer = b""
-            while len(buffer) < count:
-                chunk = self.sock.recv(count - len(buffer))
-                if not chunk:
-                    raise IOError("closed")
-                buffer += chunk
-            return buffer
+        """Read one complete application message.
 
-        header = read(2)
-        opcode = header[0] & 0x0F
-        length = header[1] & 0x7F
-        if length == 126:
-            length = struct.unpack(">H", read(2))[0]
-        elif length == 127:
-            length = struct.unpack(">Q", read(8))[0]
-        payload = read(length)
-        if opcode == 0x8:
-            raise IOError("ws closed")
-        return payload.decode("utf-8", "replace")
+        A single frame is not one message. Chrome splits large
+        Runtime.evaluate results across continuation frames and sends ping
+        frames on its own timer, so a parser that reads one frame and decodes it
+        as JSON corrupts or stalls on payloads that occur in normal use.
+        Continuation frames are reassembled, and control frames are handled
+        in-line: ping is answered with a pong carrying the same payload, and
+        pong is ignored.
+        """
+        chunks = []
+        started = False
+        while True:
+            header = self._read(2)
+            fin = bool(header[0] & 0x80)
+            opcode = header[0] & 0x0F
+            length = header[1] & 0x7F
+            if length == 126:
+                length = struct.unpack(">H", self._read(2))[0]
+            elif length == 127:
+                length = struct.unpack(">Q", self._read(8))[0]
+            masked = bool(header[1] & 0x80)
+            mask = self._read(4) if masked else None
+            payload = self._read(length) if length else b""
+            if mask:
+                payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
+
+            if opcode == 0x8:
+                raise IOError("ws closed")
+            if opcode == 0x9:
+                self._send_frame(0xA, payload)
+                continue
+            if opcode == 0xA:
+                continue
+            if opcode == 0x0:
+                if not started:
+                    raise IOError("continuation without a start frame")
+                chunks.append(payload)
+            elif opcode in (0x1, 0x2):
+                if started:
+                    raise IOError("new data frame inside a fragmented message")
+                chunks = [payload]
+                started = True
+            else:
+                raise IOError("unsupported opcode %d" % opcode)
+
+            if fin:
+                return b"".join(chunks).decode("utf-8", "replace")
 
     def call(self, mid, method, params=None):
         self.send(json.dumps({"id": mid, "method": method, "params": params or {}}))
@@ -121,6 +161,13 @@ class WS:
             message = json.loads(self.recv())
             if message.get("id") == mid:
                 return message
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
+        return False
 
     def close(self):
         try:
