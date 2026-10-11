@@ -1239,9 +1239,11 @@
         var message = (lastError && lastError.message) ||
           (!result || result.ok ? '' : result.error) || '';
         if ((lastError || !result || !result.ok) && attempt < 2 &&
-            /message port closed|service worker/i.test(message)) {
-          /* MV3 workers can be asleep on the first message after idle. Retry
-             once after the wake-up event has had a chance to register. */
+            /message port closed|service worker|input service unavailable|failed to fetch|networkerror/i.test(message)) {
+          /* Two things make the first press land on nothing: an MV3 worker that
+             was asleep, and a local bridge that is not listening yet because it
+             starts before the browser and has no page target to drive. Both are
+             transient, so retry rather than reporting the action as failed. */
           setTimeout(function () { send(attempt + 1); }, attempt === 0 ? 450 : 1200);
           return;
         }
