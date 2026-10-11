@@ -1792,10 +1792,34 @@
     if (action) focusAtEl(action);
     return true;
   }
+  /* The discovery page is server rendered, and only two pieces of it are ever
+     used: the content-wrapper block that becomes the route view, and the Nuxt
+     payload that feeds the local refresh control. Caching the whole document
+     kept a few hundred KB of markup alive in both the JS heap and
+     sessionStorage for five minutes, which is expensive on a 1 GB handheld, so
+     cache just those two slices. */
+  var DISCOVERY_CACHE_MS = 300000, DISCOVERY_CACHE_MAX = 262144;
   var discoveryCache = null, discoveryCacheAt = 0, discoveryFetch = null;
-  function getDiscoveryHtml(force) {
+  function discoveryPayload(html) {
+    var marker = 'class="wr_index_page_content_wrapper';
+    var at = html.indexOf(marker);
+    if (at < 0) return null;
+    at = html.lastIndexOf('<div', at);
+    var depth = 0, end = at, tag = /<\/?div\b[^>]*>/gi, match;
+    tag.lastIndex = at;
+    while ((match = tag.exec(html))) {
+      if (match[0].charAt(1) === '/') depth--;
+      else if (!/\/\s*>$/.test(match[0])) depth++;
+      if (depth === 0) { end = tag.lastIndex; break; }
+    }
+    if (!end) return null;
+    return { block: html.slice(at, end), books: extractSuggestionBooks(html) };
+  }
+  function getDiscoveryPayload(force) {
     var now = Date.now();
-    if (!force && discoveryCache && now - discoveryCacheAt < 300000) return Promise.resolve(discoveryCache);
+    if (!force && discoveryCache && now - discoveryCacheAt < DISCOVERY_CACHE_MS) {
+      return Promise.resolve(discoveryCache);
+    }
     if (discoveryFetch) return discoveryFetch;
     discoveryFetch = fetch(new URL('/', location.href).href, { credentials: 'include' })
       .then(function (response) {
@@ -1803,18 +1827,38 @@
         return response.text();
       })
       .then(function (html) {
-        discoveryCache = html;
-        discoveryCacheAt = Date.now();
-        try { sessionStorage.setItem('wr-hh-discovery-cache', html); sessionStorage.setItem('wr-hh-discovery-cache-at', String(discoveryCacheAt)); } catch (x) {}
-        return html;
+        var payload = discoveryPayload(html);
+        if (payload) {
+          discoveryCache = payload;
+          discoveryCacheAt = Date.now();
+          try {
+            /* Skip persistence when the slices are still large; the in-memory
+               cache is what the same-document navigation actually reads. */
+            if (payload.block.length <= DISCOVERY_CACHE_MAX) {
+              sessionStorage.setItem('wr-hh-discovery-cache', JSON.stringify(payload));
+              sessionStorage.setItem('wr-hh-discovery-cache-at', String(discoveryCacheAt));
+            } else {
+              sessionStorage.removeItem('wr-hh-discovery-cache');
+              sessionStorage.removeItem('wr-hh-discovery-cache-at');
+            }
+          } catch (x) {}
+        }
+        return payload;
       })
-      .then(function (html) { discoveryFetch = null; return html; }, function (error) { discoveryFetch = null; throw error; });
+      .then(function (payload) { discoveryFetch = null; return payload; },
+            function (error) { discoveryFetch = null; throw error; });
     return discoveryFetch;
   }
   try {
     var savedDiscovery = sessionStorage.getItem('wr-hh-discovery-cache');
     var savedAt = +(sessionStorage.getItem('wr-hh-discovery-cache-at') || 0);
-    if (savedDiscovery && savedAt && Date.now() - savedAt < 300000) { discoveryCache = savedDiscovery; discoveryCacheAt = savedAt; }
+    if (savedDiscovery && savedAt && Date.now() - savedAt < DISCOVERY_CACHE_MS) {
+      var parsedDiscovery = JSON.parse(savedDiscovery);
+      if (parsedDiscovery && typeof parsedDiscovery.block === 'string' && Array.isArray(parsedDiscovery.books)) {
+        discoveryCache = parsedDiscovery;
+        discoveryCacheAt = savedAt;
+      }
+    }
   } catch (x) {}
   function routeHost() {
     var host = document.getElementById('wr-hh-route-view');
@@ -1836,26 +1880,19 @@
     var target = new URL(href, location.href);
     var isHome = target.pathname === '/';
     if (!/^\/$|^\/web\/shelf$|^\/web\/category\//.test(target.pathname)) return Promise.reject(new Error('unsupported view'));
-    var request = isHome ? getDiscoveryHtml(false) : fetch(target.href, { credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' } }).then(function (r) { if (!r.ok) throw new Error('navigation ' + r.status); return r.text(); });
-    return request.then(function (html) {
+    var request = isHome ? getDiscoveryPayload(false) : fetch(target.href, { credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' } }).then(function (r) { if (!r.ok) throw new Error('navigation ' + r.status); return r.text(); });
+    return request.then(function (payload) {
       if (requestId !== navigationId) return false;
       var host = routeHost();
       var root = document.getElementById('__nuxt') || document.getElementById('app');
       if (isHome) {
-        var marker = 'class="wr_index_page_content_wrapper';
-        var start = html.indexOf(marker);
-        if (start < 0) throw new Error('discovery content missing');
-        start = html.lastIndexOf('<div', start);
-        var depth = 0, end = start, tag = /<\/?div\b[^>]*>/gi, match;
-        tag.lastIndex = start;
-        while ((match = tag.exec(html))) { if (match[0].charAt(1) === '/') depth--; else if (!/\/\s*>$/.test(match[0])) depth++; if (depth === 0) { end = tag.lastIndex; break; } }
-        if (!end) throw new Error('discovery block incomplete');
+        if (!payload) throw new Error('discovery content missing');
         while (host.firstChild) host.removeChild(host.firstChild);
-        host.innerHTML = html.slice(start, end);
-        suggestionBooks = extractSuggestionBooks(html); suggestionIndex = 0;
+        host.innerHTML = payload.block;
+        suggestionBooks = payload.books; suggestionIndex = 0;
       } else {
         while (host.firstChild) host.removeChild(host.firstChild);
-        host.appendChild(extractRouteView(html));
+        host.appendChild(extractRouteView(payload));
       }
       if (root) root.hidden = true;
       host.hidden = false;
