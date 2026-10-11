@@ -1730,7 +1730,13 @@
         if (kind === 'EmptyRef') { memo[index] = null; delete active[index]; return null; }
         if (kind === 'Set' || kind === 'Map') { memo[index] = kind === 'Set' ? [] : {}; delete active[index]; return memo[index]; }
         var list = []; memo[index] = list;
-        for (var i = 0; i < item.length; i++) list.push(value(item[i]));
+        /* A tagged array starts with its tag at item[0], so the payload begins
+           at item[1]. Decoding from item[0] pushed the tag name into the list as
+           a phantom first element whenever the tag was not one we know, which
+           silently shifted every value by one. Skip the tag for any array
+           whose head is a string. */
+        var from = typeof kind === 'string' ? 1 : 0;
+        for (var i = from; i < item.length; i++) list.push(value(item[i]));
         delete active[index]; return list;
       }
       var out = {}; memo[index] = out;
