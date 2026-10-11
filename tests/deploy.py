@@ -34,7 +34,10 @@ def main():
                 try:
                     command(client, "cp " + remote + " " + backup + "/" + source.name)
                 except RuntimeError:
-                    optional = {"window_guard.py", "input_bridge.py",
+                    # Files that a device may legitimately not have yet, so a
+                    # missing backup must not abort the whole deployment. cdp.py
+                    # joins this set because older installs never shipped it.
+                    optional = {"window_guard.py", "input_bridge.py", "cdp.py",
                                 "background-v8.1.js", "shell.css", "Weread.png",
                                 "telemetry-rules.json"}
                     if source.name not in optional:
