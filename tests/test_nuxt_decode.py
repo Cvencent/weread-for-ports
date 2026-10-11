@@ -11,6 +11,7 @@ tag name into the result as a phantom first element and shifted every real
 value by one. Suggestions are read straight out of this payload, so a Nuxt
 upgrade that added a tag would have shifted the whole recommendation batch.
 """
+import json
 import pathlib
 import re
 import shutil
@@ -42,6 +43,30 @@ class NuxtDecodeTests(unittest.TestCase):
         self.assertIn("typeof kind === 'string' ? 1 : 0", body)
         # The old unconditional loop is gone.
         self.assertNotIn("for (var i = 0; i < item.length; i++) list.push", body)
+
+    def test_devalue_never_encodes_a_plain_array_with_a_leading_string(self):
+        """The decoder's string-at-slot-0 test is only sound if devalue cannot
+        produce a plain array whose first element is a string.
+
+        Checked against recorded real devalue@6.0.2 output rather than assumed,
+        so the invariant is pinned to actual encoding behaviour."""
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("node is not available")
+        harness = pathlib.Path(__file__).resolve().parent / "_devalue_invariant.js"
+        result = subprocess.run([node, str(harness)], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("DEVALUE: PASS", result.stdout)
+        self.assertNotIn("BAD", result.stdout)
+
+    def test_the_recorded_samples_are_real_devalue_output(self):
+        samples = json.loads(
+            (ROOT / "tests" / "devalue_flat_samples.json").read_text(encoding="utf-8"))
+        self.assertTrue(samples["cases"], "no recorded samples")
+        for case in samples["cases"]:
+            self.assertIn("label", case)
+            self.assertIn("flat", case)
+            self.assertIsInstance(case["flat"], list)
 
     def test_every_known_tag_is_still_unwrapped(self):
         source = (ROOT / "extension/content.js").read_text(encoding="utf-8")
