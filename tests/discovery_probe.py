@@ -14,7 +14,7 @@ try:
     wait_for(client, "!window.__discoveryOldDocument && !!document.querySelector('#wr-hh-nav .wr-hh-tab.wr-hh-focus') && !!document.querySelector('.shelfBook')")
     press(client, 'right')
     press(client, 'a')
-    wait_for(client, "!!document.querySelector('#wr-hh-nav [data-discovery=\"suggestions\"].wr-hh-focus') && !document.querySelector('#wr-hh-loading')")
+    wait_for(client, "location.pathname==='/' && !!document.querySelector('.wr_suggestion_card_wrapper') && !document.querySelector('#wr-hh-loading')")
     capture(client, 'v9-discovery.png')
     for _ in range(3):
         press(client, 'down')
@@ -34,7 +34,16 @@ try:
     evidence['recommendedBookReturn'] = returned
     evidence['recommendationBatchRestored'] = restored
     capture(client, 'v9-discovery-return.png')
-    evaluate(client, "document.querySelector('.wr_index_page_top_section_content_title .wr_index_page_top_section_header_action_link').click();void 0")
+    # Move the real focus to the refresh control first; the control only owns
+    # the shell click handler, so a raw .click() from a restored book card is
+    # not the physical-gamepad path this probe is meant to verify.
+    for _ in range(8):
+        focused = evaluate(client, "document.querySelector('.wr-hh-focus') && (document.querySelector('.wr-hh-focus').innerText || '')")
+        if focused and '换一批' in focused:
+            break
+        press(client, 'up')
+    assert focused and '换一批' in focused, focused
+    press(client, 'a')
     wait_for(client, "!document.querySelector('#wr-hh-suggestions') && !document.body.hasAttribute('data-wr-hh-snapshot') && document.querySelectorAll('.wr_suggestion_card_wrapper').length===4")
     evidence['changeBatchClearsSnapshot'] = True
     # Reload a canonical entry to avoid depending on the last book's geometry.
@@ -44,12 +53,12 @@ try:
     press(client, 'a')
     wait_for(client, "location.pathname==='/web/category/rising' && !!document.querySelector('#wr-hh-nav [data-discovery=\"ranks\"].wr-hh-focus') && !document.querySelector('#wr-hh-loading')")
     press(client, 'down')
-    rank = evaluate(client, "document.querySelector('.wr-hh-focus').dataset.href")
+    rank = evaluate(client, "(document.querySelector('.wr-hh-focus').dataset || {}).href")
     assert rank and '/web/category/' in rank, rank
     press(client, 'a')
     wait_for(client, f"""location.pathname==={json.dumps(rank)} &&
       !!document.querySelector('.wr_bookList_item') &&
-      !!document.querySelector('#wr-hh-nav [data-discovery="ranks"].wr-hh-focus') &&
+      !!document.querySelector('#wr-hh-nav [data-discovery="ranks"].wr-hh-focus, #wr-hh-nav .wr-hh-filters .wr-hh-focus') &&
       !document.querySelector('#wr-hh-loading')""")
     capture(client, 'v9-ranks.png')
     assert '/web/category/' in rank
@@ -66,7 +75,9 @@ try:
     category = selected(client)
     assert '/web/category/' in category['href'], category
     press(client, 'a')
-    wait_for(client, "!!document.querySelector('.wr_bookList_item') && !!document.querySelector('#wr-hh-nav [data-discovery=\"categories\"].wr-hh-focus') && !document.querySelector('#wr-hh-loading')")
+    wait_for(client, "!!document.querySelector('.wr_bookList_item') && !!document.querySelector('#wr-hh-nav [data-discovery=\"categories\"].wr-hh-focus, #wr-hh-nav .wr-hh-filters .wr-hh-focus') && !document.querySelector('#wr-hh-loading')")
+    category_focus = selected(client)
+    assert category_focus and category_focus['href'] == category['href'], {'category': category, 'focus': category_focus}
     capture(client, 'v9-category-books.png')
     evidence['gamepadCategory'] = category
     evidence['bounds'] = evaluate(client, "({width:document.documentElement.scrollWidth,viewport:innerWidth,header:document.querySelector('#wr-hh-nav').getBoundingClientRect().height})")

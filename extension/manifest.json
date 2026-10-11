@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "WeRead Handheld Shell",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "微信读书 Ports 平台适配外壳，已在 X35S 验证",
   "background": { "service_worker": "background-v8.1.js" },
   "host_permissions": ["http://127.0.0.1:9223/*"],
@@ -10,9 +10,12 @@
       "matches": ["*://weread.qq.com/*"],
       "js": ["content.js"],
       "css": ["shell.css"],
-      "run_at": "document_idle",
+      "run_at": "document_start",
       "all_frames": false
     }
   ],
-  "permissions": ["storage"]
+  "permissions": ["storage", "declarativeNetRequest"],
+  "declarative_net_request": {
+    "rule_resources": [{ "id": "telemetry", "enabled": true, "path": "telemetry-rules.json" }]
+  }
 }

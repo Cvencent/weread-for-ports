@@ -5,6 +5,7 @@ const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'output', 'weread-for-ports-full.md');
 const documents = [
   'README.md',
+  'docs/release-v10.md',
   'docs/verification-v9.md',
   'docs/legacy/ui-v8-verification.md',
   'docs/architecture.md',
@@ -17,7 +18,7 @@ for (const name of documents) {
 }
 parts.push('# Current source appendix\n\nOnly `extension/shell.css` is loaded; `extension/legacy/style.css` is kept for reference.\n');
 const sources = [
-  'extension/manifest.json', 'extension/background-v8.1.js', 'extension/content.js',
+  'extension/manifest.json', 'extension/telemetry-rules.json', 'extension/background-v8.1.js', 'extension/content.js',
   'extension/shell.css', 'ports/Weread.sh', 'ports/install.sh', 'ports/uninstall.sh',
   'ports/update_gamelist.py', 'launcher/node.sh', 'launcher/window_guard.py',
   'launcher/input_bridge.py', 'launcher/weread.gptk', 'launcher/操作说明.txt',

@@ -1,3 +1,17 @@
+/* Hide the site until the handheld shell has installed its first stable frame. */
+html:not(.wr-hh-boot-ready) body > *:not(#wr-hh-boot-mask) { visibility: hidden !important; }
+#wr-hh-boot-mask { position: fixed; inset: 0; z-index: 2147483647; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: #f2f4f7; color: #596270; font: 16px "Noto Sans SC", sans-serif; }
+html.wr-hh-boot-ready #wr-hh-boot-mask { display: none; }
+/* Keep offscreen discovery/shelf work out of the paint and layout budget. Never apply to reader canvas containers. */
+body.wr-hh-perf .shelfBook,
+body.wr-hh-perf .shelfArchive,
+body.wr-hh-perf .wr_suggestion_card_wrapper,
+body.wr-hh-perf .wr_bookList_item,
+body.wr-hh-perf #wr-hh-categories a { content-visibility: auto; contain-intrinsic-size: 160px 200px; }
+body.wr-hh-perf .shelfBook img,
+body.wr-hh-perf .shelfArchive img,
+body.wr-hh-perf .wr_suggestion_card_wrapper img,
+body.wr-hh-perf .wr_bookList_item img { content-visibility: auto; }
 /* v8 shell. Never change the website's reader canvas layout. */
 :root {
   --hh-bg: #f2f4f7; --hh-surface: #fff; --hh-ink: #20242b; --hh-muted: #596270;
@@ -149,6 +163,8 @@ body[data-wr-hh-discovery] .wr_suggestion_card_content_info { flex: 1; min-width
 body[data-wr-hh-discovery] .wr_suggestion_card_content_title { display: -webkit-box !important; -webkit-line-clamp: 2; -webkit-box-orient: vertical; height: auto !important; max-height: 40px !important; white-space: normal !important; font-size: 14px !important; line-height: 20px !important; color: var(--hh-ink) !important; overflow: hidden; overflow-wrap: anywhere; text-align: left !important; }
 body[data-wr-hh-discovery] .wr_suggestion_card_content_author { height: auto !important; margin-top: 4px !important; font-size: 12px !important; line-height: 18px !important; color: var(--hh-muted) !important; text-align: left !important; }
 body[data-wr-hh-discovery] .wr_suggestion_card_content_reason { display: -webkit-box !important; -webkit-line-clamp: 3; -webkit-box-orient: vertical; height: auto !important; margin-top: 8px !important; font-size: 12px !important; line-height: 18px !important; color: var(--hh-green) !important; white-space: normal !important; overflow: hidden; text-align: left !important; }
+#wr-hh-route-view { position: fixed; inset: var(--hh-header) 0 0; overflow: auto; z-index: 2; background: var(--hh-bg); }
+#wr-hh-route-view[hidden] { display: none; }
 #wr-hh-categories { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 6px 0; }
 #wr-hh-categories a { display: flex; align-items: center; justify-content: center; min-width: 0; height: 48px; border: 1px solid var(--hh-line); border-radius: 6px; background: var(--hh-surface); color: var(--hh-ink); font-size: 15px; text-decoration: none; }
 body.wr-hh-has-nav .ranking_page_sidebar_Container { display: none !important; }
@@ -165,22 +181,25 @@ body.wr-hh-has-nav .wr_bookList_item_link { position: absolute !important; inset
 body.wr-hh-has-nav .wr_bookList_item_index { flex: none; position: static !important; width: 18px !important; margin: 0 !important; padding: 0 !important; font-size: 16px !important; line-height: 24px !important; color: var(--hh-blue) !important; }
 body.wr-hh-has-nav .wr_bookList_item_cover { flex: none; width: 54px !important; height: 78px !important; margin: 0 !important; }
 body.wr-hh-has-nav .wr_bookList_item_info { flex: 1; width: auto !important; min-width: 0; margin: 0 !important; padding: 0 !important; }
-body.wr-hh-has-nav .wr_bookList_item_title { display: -webkit-box !important; -webkit-line-clamp: 2; -webkit-box-orient: vertical; max-height: 40px !important; margin: 0 !important; font-size: 14px !important; line-height: 20px !important; white-space: normal !important; overflow: hidden; }
-body.wr-hh-has-nav .wr_bookList_item_author { margin: 4px 0 !important; font-size: 12px !important; line-height: 18px !important; }
-body.wr-hh-has-nav .wr_bookList_item_reading { margin: 0 !important; font-size: 12px !important; line-height: 18px !important; }
+body.wr-hh-has-nav .wr_bookList_item_title { display: -webkit-box !important; -webkit-line-clamp: 2; -webkit-box-orient: vertical; max-height: 40px !important; margin: 0 !important; font-size: 15px !important; line-height: 20px !important; font-weight: 600 !important; color: var(--hh-ink) !important; white-space: normal !important; overflow: hidden; overflow-wrap: anywhere; }
+body.wr-hh-has-nav .wr_bookList_item_author { margin: 4px 0 !important; font-size: 12px !important; line-height: 18px !important; color: var(--hh-muted) !important; }
+body.wr-hh-has-nav .wr_bookList_item_author a { color: inherit !important; text-decoration: none !important; }
+body.wr-hh-has-nav .wr_bookList_item_reading { margin: 0 !important; font-size: 12px !important; line-height: 18px !important; color: var(--hh-muted) !important; }
+body.wr-hh-has-nav .wr_bookList_item_reading_percent { color: var(--hh-green) !important; font-weight: 600 !important; }
+body.wr-hh-has-nav .wr_bookList_item .book_rating_item_label_number_image { width: auto !important; height: 22px !important; max-width: 60px !important; margin-left: 6px !important; vertical-align: middle !important; object-fit: contain !important; }
 body.wr-hh-has-nav .wr_bookList_item_readingCountText,
 body.wr-hh-has-nav .wr_bookList_item_reading_dep,
 body.wr-hh-has-nav .wr_bookList_item_desc,
 body.wr-hh-has-nav .wr_bookList_item .wr_readingCount { display: none !important; }
 #wr-hh-loading { position: fixed; inset: var(--hh-header) 0 0; z-index: 2147482900; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: var(--hh-bg); color: var(--hh-muted); font: 16px "Noto Sans SC", sans-serif; }
 body:not(.wr-hh-has-nav) #wr-hh-loading { top: 0; }
+#wr-hh-busy { position: fixed; inset: var(--hh-header) 0 0; z-index: 2147483400; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: var(--hh-bg); color: var(--hh-muted); font: 16px "Noto Sans SC", sans-serif; pointer-events: none; }
+body:not(.wr-hh-has-nav) #wr-hh-busy { top: 0; }
 .wr-hh-spinner { width: 26px; height: 26px; border: 3px solid var(--hh-line); border-top-color: var(--hh-blue); border-radius: 50%; animation: wr-hh-spin .8s linear infinite; }
 @keyframes wr-hh-spin { to { transform: rotate(360deg); } }
 .wr-hh-load-actions { display: flex; gap: 16px; }
 .wr-hh-load-actions[hidden] { display: none; }
 .wr-hh-load-actions button { min-width: 100px; height: 44px; padding: 0 12px; border: 1px solid var(--hh-line); border-radius: 6px; background: var(--hh-surface); color: var(--hh-blue); font: inherit; }
-body.wr-hh-has-nav .app_content, body[data-wr-hh-discovery] .wr_index_page_content_wrapper { animation: wr-hh-arrive .16s ease-out; }
-@keyframes wr-hh-arrive { from { opacity: .3; } to { opacity: 1; } }
 .chapterContentError .retry { min-height: 40px; padding: 4px 12px !important; }
 body.wr-hh-has-nav .search_wrap { top: var(--hh-header) !important; height: calc(100vh - var(--hh-header)) !important; background: var(--hh-bg); }
 body.wr-hh-has-nav .search_body { height: 100% !important; }
@@ -243,6 +262,13 @@ body.wr-hh-searching .navBar { display: block !important; position: fixed !impor
 }
 .font-panel-content { overflow-y: auto !important; }
 .readerCatalog .wr-hh-focus { outline-offset: -3px !important; }
+/* Left-stick annotation selection. It only paints the site-owned underline layer. */
+.wr_underline_wrapper.wr-hh-annotation {
+  outline: 3px solid #1677ff !important;
+  outline-offset: 2px !important;
+  box-shadow: 0 0 0 5px rgba(22,119,255,.18) !important;
+  z-index: 8 !important;
+}
 @media (max-width: 519px) {
   .wr-hh-primary { padding: 0 10px; gap: 4px; }
   .wr-hh-brand { font-size: 18px; }

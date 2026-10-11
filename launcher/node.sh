@@ -64,6 +64,7 @@ selfcheck() {
   [ -f "$WINDOW_GUARD" ]        || { echo "[weread] window guard missing"; bad=1; }
   [ -f "$INPUT_BRIDGE" ]         || { echo "[weread] input bridge missing"; bad=1; }
   [ -f "$EXT/background-v8.1.js" ] || { echo "[weread] extension worker missing"; bad=1; }
+  [ -f "$EXT/telemetry-rules.json" ] || { echo "[weread] extension rules missing"; bad=1; }
   [ -d "$PROFILE" ]              || mkdir -p "$PROFILE"
   [ "$bad" = 1 ] && return 1
   return 0
@@ -144,6 +145,7 @@ trap cleanup EXIT INT TERM
 # ---------------- 启动前清理残留 ----------------
 pkill -9 -f "chrome --" 2>/dev/null
 kill_hijackers
+pkill -f "$INPUT_BRIDGE" 2>/dev/null
 rm -f "$PROFILE"/Singleton* 2>/dev/null
 sleep 1
 
@@ -182,7 +184,7 @@ cd "$DEST/chromium" || exit 1
   --enable-features=UseOzonePlatform,Vulkan \
   --ignore-gpu-blocklist \
   --enable-gpu-rasterization \
-  --renderer-process-limit=1 \
+  --renderer-process-limit=2 \
   --process-per-site \
   --js-flags="--max-old-space-size=256" \
   --disk-cache-size=52428800 \
@@ -190,7 +192,7 @@ cd "$DEST/chromium" || exit 1
   --window-size=640,480 --window-position=0,0 \
   --start-fullscreen \
   --no-first-run --no-default-browser-check \
-  --disable-features=Translate,BackForwardCache,CalculateNativeWinOcclusion,MediaRouter,OptimizationHints \
+  --disable-features=Translate,CalculateNativeWinOcclusion,MediaRouter,OptimizationHints \
   --disable-background-networking \
   --disable-component-update \
   --remote-debugging-port="$DEBUG_PORT" \
@@ -211,18 +213,23 @@ BPID=$!
   done
 ) &
 
-# ---------------- 看门狗：仅当【page 目标】真的异常时才拉回首页 ----------------
-#   ⚠️⚠️ 血泪：先前用 `curl /json | grep -q 'chrome://'` 判断，
-#      但 /json 里**始终**存在 Omnibox Popup 这类 browser_ui 目标（url 是 chrome://…）
-#      ⇒ 模式恒命中 ⇒ 每 15 秒把页面强行导航回首页
-#      ⇒ 症状：刚打开书本（reader=true）十几秒后被踢回首页/书架，用户以为"打不开书"。
-#   ✅ 现在只解析 type=="page" 的目标，且只认「空 / about:blank / chrome-error」三种真异常。
-watchdog() {
-  local bad
+# ---------------- 统一 shell 守卫 ----------------
+#  焦点、全屏和异常页兜底合并为一个低频循环：
+#   - 不再每 3/4 秒各启动一个 Python/WS 查询；
+#   - 页面健康检查异步执行，网络慢时不阻塞焦点/全屏修复；
+#   - 保留真正异常页（空/about:blank/chrome-error/chrome://data:）拉回首页。
+shell_guard() {
+  local tick=0 health_pid=""
   while :; do
-    sleep 15
+    sleep 5
     pgrep -f "chrome --" >/dev/null 2>&1 || break
-    bad=$(python3 - <<'PY'
+    tick=$((tick + 1))
+    [ -n "$SWAYSOCK" ] || continue
+    python3 "$WINDOW_GUARD" focus
+    [ $((tick % 2)) -eq 0 ] && python3 "$WINDOW_GUARD" fullscreen
+    if [ $((tick % 4)) -eq 0 ] && [ -z "$health_pid" ]; then
+      (
+        bad=$(python3 - <<'PY'
 import json, urllib.request, sys
 try:
     ts = json.load(urllib.request.urlopen("http://127.0.0.1:9222/json", timeout=4))
@@ -238,43 +245,18 @@ for t in ts:
         break
 PY
 )
-    if [ -n "$bad" ]; then
-      echo "[weread] watchdog: 检出异常页面，拉回首页"
-      python3 "$DEST/cdp.py" --url "https://weread.qq.com/" "location.href" >/dev/null 2>&1
-      sleep 8
-      [ -n "$SWAYSOCK" ] && python3 "$WINDOW_GUARD" fullscreen
+        if [ -n "$bad" ]; then
+          echo "[weread] shell guard: 检出异常页面，拉回首页"
+          python3 "$DEST/cdp.py" --url "https://weread.qq.com/" "location.href" >/dev/null 2>&1
+        fi
+      ) &
+      health_pid=$!
+    elif [ -n "$health_pid" ] && ! kill -0 "$health_pid" 2>/dev/null; then
+      wait "$health_pid" 2>/dev/null
+      health_pid=""
     fi
   done
 }
-watchdog &
-
-# ---------------- 焦点守卫 ----------------
-#   ⚠️ 血泪：实测多次发现「焦点悄悄漂回 ES」——
-#      现象 = 手柄按键完全没反应（但进程都在、gptokeyb 也活着）。
-#      判据：sway 的 focused 节点变成了 emulationstation。
-#   ⇒ 每 3 秒体检：只要 chrome 还在，且 focused 不是 chrome，就抢回来。
-focusguard() {
-  while :; do
-    sleep 3
-    # chrome 不在了就退出（应用已关）
-    pgrep -f "chrome --" >/dev/null 2>&1 || break
-    [ -n "$SWAYSOCK" ] || continue
-    python3 "$WINDOW_GUARD" focus
-  done
-}
-focusguard &
-
-# ---------------- 全屏守卫 ----------------
-#   ⚠️ 血泪：实测窗口会从 fullscreen 掉回平铺 ⇒ 视口变成 620×339（正常应 640×480），
-#      表现为「界面被压扁、右侧内容被裁掉」。这里每 4 秒强制回全屏。
-fullguard() {
-  while :; do
-    sleep 4
-    pgrep -f "chrome --" >/dev/null 2>&1 || break
-    [ -n "$SWAYSOCK" ] || continue
-    python3 "$WINDOW_GUARD" fullscreen
-  done
-}
-fullguard &
+shell_guard &
 
 wait $CHPID

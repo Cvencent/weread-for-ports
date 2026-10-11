@@ -15,6 +15,7 @@ SELECTORS = {
     "close": "[data-wr-hh-active-panel]",
     "font-previous": ".reader_font_control_slider_track",
     "font-next": ".reader_font_control_slider_track",
+    "annotation": "[data-wr-hh-annotation]",
 }
 
 
@@ -27,8 +28,11 @@ def point_expression(selector):
         var left=Math.max(0,r.left),right=Math.min(innerWidth,r.right);
         var top=Math.max(0,r.top),bottom=Math.min(innerHeight,r.bottom);
         if(right-left<8||bottom-top<8) continue;
-        var x=(left+right)/2,y=(top+bottom)/2,hit=document.elementFromPoint(x,y);
-        if(hit&&(el===hit||el.contains(hit))) return {x:x,y:y};
+        var points=[[(left+right)/2,(top+bottom)/2],[left+4,(top+bottom)/2],[right-4,(top+bottom)/2],[(left+right)/2,top+4],[(left+right)/2,bottom-4]];
+        for(var p=0;p<points.length;p++){
+          var x=points[p][0],y=points[p][1],hit=document.elementFromPoint(x,y);
+          if(hit&&(el===hit||el.contains(hit)||hit.contains(el))) return {x:x,y:y};
+        }
       }
       return null;
     })()""" % json.dumps(selector)
@@ -84,6 +88,16 @@ def click_action(action):
             })
             if "error" in result:
                 raise ValueError("Browser rejected input")
+        if action in ("font-previous", "font-next"):
+            key = "ArrowLeft" if action == "font-previous" else "ArrowRight"
+            code = 37 if key == "ArrowLeft" else 39
+            for index, event in enumerate(("keyDown", "keyUp"), 4):
+                result = ws.call(index, "Input.dispatchKeyEvent", {
+                    "type": event, "key": key, "code": key,
+                    "windowsVirtualKeyCode": code, "nativeVirtualKeyCode": code,
+                })
+                if "error" in result:
+                    raise ValueError("Browser rejected keyboard input")
         return {"ok": True}
     finally:
         if action in ("catalog", "settings"):

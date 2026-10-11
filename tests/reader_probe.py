@@ -28,7 +28,7 @@ try:
     wait_for(client, CANVAS_HAS_INK, 40)
     assert not evaluate(client, "!!document.querySelector('#wr-hh-menu')"), 'A opened the menu during a chapter error'
     capture(client, 'v9-retry-recovered.png')
-    press(client, 'a')
+    press(client, 'start')
     wait_for(client, "!!document.querySelector('#wr-hh-menu')")
     press(client, 'b')
     press(client, 'x')

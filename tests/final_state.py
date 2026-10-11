@@ -13,17 +13,18 @@ FILES = {
     "extension/background-v8.1.js": "/storage/.config/weread-ext/background-v8.1.js",
     "extension/shell.css": "/storage/.config/weread-ext/shell.css",
     "extension/manifest.json": "/storage/.config/weread-ext/manifest.json",
+    "extension/telemetry-rules.json": "/storage/.config/weread-ext/telemetry-rules.json",
     "launcher/node.sh": "/storage/roms/ports/weread/node.sh",
     "launcher/window_guard.py": "/storage/roms/ports/weread/window_guard.py",
     "launcher/input_bridge.py": "/storage/roms/ports/weread/input_bridge.py",
+    "launcher/weread.gptk": "/storage/roms/ports/browser/weread.gptk",
     "launcher/操作说明.txt": "/storage/roms/ports/browser/操作说明.txt",
-    "ports/Weread.sh": "/storage/roms/ports/Weread.sh",
     "ports/media/Weread.png": "/storage/roms/ports/media/Weread.png",
 }
 
 client = connect()
 try:
-    wait_for(client, "location.pathname==='/web/shelf' && !!document.querySelector('#wr-hh-nav .wr-hh-focus')")
+    wait_for(client, "location.pathname==='/web/shelf' && !!document.querySelector('#wr-hh-nav') && !!document.querySelector('.wr-hh-focus')")
     wait_for(client, """Array.from(document.querySelectorAll('.shelfBook')).slice(0,8)
       .every(e=>{var i=e.querySelector('img');return i&&i.complete&&i.naturalWidth>0;})""")
     state = evaluate(client, """(function(){

@@ -18,10 +18,10 @@ done
 chmod 755 "$WEREAD_DIR/node.sh" "$WEREAD_DIR/window_guard.py" "$WEREAD_DIR/input_bridge.py"
 chmod 644 "$WEREAD_DIR/weread.gptk"
 
-for file in content.js shell.css manifest.json background-v8.1.js; do
+for file in content.js shell.css manifest.json background-v8.1.js telemetry-rules.json; do
   cp "$ROOT/extension/$file" "$EXT_DIR/$file"
 done
-chmod 644 "$EXT_DIR/content.js" "$EXT_DIR/shell.css" "$EXT_DIR/manifest.json" "$EXT_DIR/background-v8.1.js"
+chmod 644 "$EXT_DIR/content.js" "$EXT_DIR/shell.css" "$EXT_DIR/manifest.json" "$EXT_DIR/background-v8.1.js" "$EXT_DIR/telemetry-rules.json"
 
 mkdir -p "$BROWSER_DIR"
 cp "$ROOT/launcher/操作说明.txt" "$BROWSER_DIR/操作说明.txt"

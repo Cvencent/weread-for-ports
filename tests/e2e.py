@@ -51,7 +51,7 @@ def capture(client, name):
 def selected(client):
     return evaluate(client, """(function(){
       var e=document.querySelector('.wr-hh-focus');
-      return e ? {title:e.getAttribute('aria-label')||e.innerText,href:e.getAttribute('href')} : null;
+      return e ? {title:e.getAttribute('aria-label')||e.innerText,href:e.getAttribute('data-href')||e.getAttribute('href')} : null;
     })()""")
 
 
@@ -124,7 +124,7 @@ def main():
         print("PASS gamepad navigation", flush=True)
 
         if "--skip-search" not in sys.argv:
-            press(client, "l2")
+            press(client, "start")
             wait_for(client, "!!document.getElementById('wr-hh-menu')")
             capture(client, "v8-final-menu.png")
             press(client, "a")
@@ -169,7 +169,7 @@ def main():
         evidence["canvas"] = {"before": before, "next": after, "previous": restored}
         print("PASS book activation and canvas pagination", flush=True)
 
-        press(client, "l2")
+        press(client, "start")
         wait_for(client, "!!document.getElementById('wr-hh-menu')")
         assert protected_layout(client) == geometry, "Reading menu changed pagination layout"
         capture(client, "v8-final-reader-menu.png")

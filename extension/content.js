@@ -22,12 +22,78 @@
      X           目录
      Y           下一页
      L1 / R1     上一页 / 下一页（菜单内=左右移动）
+     L2 / R2     页面顶部 / 底部；阅读器内=上一页 / 下一页
      SELECT      退出应用
      START       唤出掌机菜单（目录/设置/搜索/上一页/书架/退出）
-     （阅读器内按 A 也唤出同一菜单）
+     （阅读器内 A 只确认当前焦点；Start 才唤出菜单）
    ============================================================ */
 (function () {
   'use strict';
+  function readPendingLoading() {
+    try {
+      var pending = JSON.parse(sessionStorage.getItem('wr-hh-loading') || 'null');
+      if (pending && pending.text && pending.text.indexOf('失败') < 0 && Date.now() - pending.started < 20000) return pending;
+    } catch (x) {}
+    return null;
+  }
+  function ensureBootMask() {
+    var root = document.documentElement;
+    if (!root) return;
+    root.classList.remove('wr-hh-boot-ready');
+    if (!document.getElementById('wr-hh-boot-mask')) {
+      var mask = document.createElement('div');
+      mask.id = 'wr-hh-boot-mask';
+      mask.setAttribute('role', 'status');
+      mask.setAttribute('aria-live', 'polite');
+      mask.innerHTML = '<span class="wr-hh-spinner" aria-hidden="true"></span><strong></strong>';
+      var label = mask.querySelector('strong');
+      var pending = readPendingLoading();
+      if (label) label.textContent = (pending && pending.text) || '正在加载微信读书';
+      root.appendChild(mask);
+    }
+  }
+  function releaseBootMask() {
+    var root = document.documentElement;
+    if (root) root.classList.add('wr-hh-boot-ready');
+    var mask = document.getElementById('wr-hh-boot-mask');
+    if (mask) mask.remove();
+  }
+  function setBootMaskText(text) {
+    var mask = document.getElementById('wr-hh-boot-mask');
+    if (!mask) return;
+    var label = mask.querySelector('strong');
+    if (label) label.textContent = text || '正在加载微信读书';
+  }
+  /* Warm DNS/TLS to the reader asset hosts before the reader document loads. */
+  function ensurePreconnect() {
+    var root = document.head || document.documentElement;
+    if (!root) return;
+    ['https://cdn.weread.qq.com', 'https://res.weread.qq.com', 'https://oss.weread.qq.com'].forEach(function (host) {
+      if (document.querySelector('link[data-wr-hh-preconnect="' + host + '"]')) return;
+      var link = document.createElement('link');
+      link.setAttribute('rel', 'preconnect');
+      link.setAttribute('href', host);
+      link.setAttribute('crossorigin', 'anonymous');
+      link.setAttribute('data-wr-hh-preconnect', host);
+      root.appendChild(link);
+    });
+  }
+  ensureBootMask();
+  ensurePreconnect();
+
+  /* The site loads a payment widget synchronously from midas.gtimg.cn in <head>.
+     If that host stalls, the document never reaches body/DOMContentLoaded and
+     the extension cannot receive any key input. Reload once after a generous
+     timeout; sessionStorage prevents a reload loop. */
+  (function guardHeadStall() {
+    var key = 'wr-hh-head-stall-' + location.pathname;
+    try { if (sessionStorage.getItem(key)) return; } catch (x) {}
+    setTimeout(function () {
+      if (document.readyState !== 'loading' || document.body) return;
+      try { sessionStorage.setItem(key, '1'); } catch (x) {}
+      window.location.reload();
+    }, 12000);
+  })();
 
   var FOCUS = 'wr-hh-focus';
   var NAV = 'wr-hh-nav';
@@ -61,8 +127,9 @@
     return false;
   }
   function isReader() {
+    var reader = $('.wr_horizontalReader,.readerChapterContent_container');
     return /\/web\/reader\//.test(location.pathname) ||
-           !!$('.wr_horizontalReader,.readerChapterContent_container');
+           (reader && shown(reader));
   }
   function hasNav() { return !!document.getElementById(NAV); }
   function menuEl() { return document.getElementById(MENU); }
@@ -167,19 +234,21 @@
 
     var activePanel = openPanel();
     var raw;
-    if (activePanel) raw = activePanel.querySelectorAll(SEL);
+    if (activePanel && activePanel.matches('.readerCatalog')) raw = activePanel.querySelectorAll('.readerCatalog_list_item,.readerCatalog_list_item_inner');
+    else if (activePanel) raw = activePanel.querySelectorAll(SEL);
     else if (loadingState) raw = document.querySelectorAll('#wr-hh-loading button');
     else if (document.body.classList.contains('body_search_show')) raw = document.querySelectorAll('.search_result a,.search_result button,.search_result [role="button"]');
     else if (location.pathname === '/web/shelf') raw = document.querySelectorAll('.shelfBook,.shelfArchive');
     else if (location.pathname === '/') raw = document.querySelectorAll('.wr_suggestion_card_wrapper,.wr_index_page_top_section_content_title .wr_index_page_top_section_header_action_link,#wr-hh-categories a');
     else if (/^\/web\/category\//.test(location.pathname)) raw = document.querySelectorAll('.wr_bookList_item,.ranking_page_header button,.ranking_page_header [role="button"]');
+    else if (isReader()) raw = document.querySelectorAll('.chapterContentError .retry,.readerError button');
     else raw = document.querySelectorAll(SEL);
     var list = [];
     for (var i = 0; i < raw.length; i++) {
       var e = raw[i];
       if (activePanel && !activePanel.contains(e)) continue;
       if (activePanel && e.classList.contains('font-panel-content-fonts-tab')) continue;
-      if (mine(e)) continue;
+      if (mine(e) && !e.matches('#' + NAV + ' .wr-hh-tab')) continue;
       if (isTextish(e)) continue;          /* ⭐ v6：排除搜索框等文本输入 */
       if (!shown(e)) continue;
       var r = rc(e);
@@ -233,6 +302,17 @@
       el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
       return;
     }
+    var route = document.getElementById('wr-hh-route-view');
+    if (route && route.contains(el)) {
+      var routeRect = rc(route);
+      var routeItem = rc(el);
+      if (routeItem.top < routeRect.top + 6) {
+        route.scrollTop += routeItem.top - routeRect.top - 12;
+      } else if (routeItem.bottom > routeRect.bottom - 6) {
+        route.scrollTop += routeItem.bottom - routeRect.bottom + 12;
+      }
+      return;
+    }
     var panel = openPanel();
     if (panel && panel.contains(el)) {
       el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
@@ -249,6 +329,15 @@
       if (r.top < top + 6) window.scrollBy(0, r.top - top - 12);
       else if (r.bottom > innerHeight - 6) window.scrollBy(0, r.bottom - innerHeight + 12);
       else break;
+    }
+  }
+
+  function jumpEdge(dir) {
+    var route = document.getElementById('wr-hh-route-view');
+    var target = route && !route.hidden ? route : document.scrollingElement || document.documentElement;
+    target.scrollTop = dir === 'top' ? 0 : target.scrollHeight;
+    if (target !== document.scrollingElement && target !== document.documentElement) {
+      window.scrollTo(0, dir === 'top' ? 0 : document.documentElement.scrollHeight);
     }
   }
 
@@ -288,7 +377,8 @@
   }
   function keyOf(e) {
     if (!e) return '';
-    var h = e.getAttribute && e.getAttribute('href');
+    var dataHref = e.getAttribute && e.getAttribute('data-href');
+    var h = dataHref || e.getAttribute && e.getAttribute('href');
     var bookLink = !h && e.querySelector && e.querySelector('a[href*="/web/reader/"]');
     if (bookLink) h = bookLink.getAttribute('href');
     if (h) {
@@ -329,11 +419,18 @@
 
   function focusFirst() {
     if (isReader() && !openPanel()) { syncRetry(); return; }
-    if (location.pathname === '/' && pendingOriginKey) {
+    if (pendingOriginKey && (location.pathname === '/' || /^\/web\/category\//.test(location.pathname))) {
       var remembered = findByKey(pendingOriginKey);
       if (remembered) { focusAtEl(remembered); return; }
     }
-    if (!focusEl || !focusEl.isConnected) focusAtEl($('#' + NAV + ' [data-discovery].on') || $('#' + NAV + ' .wr-hh-tab.on'));
+    var remembered = findByKey(focusKey);
+    if (remembered) { focusAtEl(remembered); return; }
+    if (!focusEl || !focusEl.isConnected) {
+      var primaryTab = $("#" + NAV + " .wr-hh-tab.on");
+      var sectionTab = $("#" + NAV + " [data-discovery].on");
+      var inDiscovery = location.pathname === '/' || /^\/web\/category\//.test(location.pathname);
+      focusAtEl(inDiscovery ? (sectionTab || primaryTab) : (primaryTab || sectionTab));
+    }
     else focusAtEl(focusEl);
   }
 
@@ -530,6 +627,8 @@
       return;
     }
     ensureVisible(el);
+    var shellTab = el.closest && el.closest('#' + NAV + ' .wr-hh-tab');
+    if (shellTab) { activateTab(shellTab); invalidateSoon(); return; }
     var target = el;
     if (!(/^(A|BUTTON)$/.test(el.tagName) ||
           el.getAttribute('role') === 'button' || el.onclick)) {
@@ -780,6 +879,109 @@
     diag({ kbd: kbdBuf });
   }
 
+  /* ================= 评论划线选择 ================= */
+  var annotationEl = null;
+  function annotationItems() {
+    var raw = $$('.wr_underline_wrapper');
+    var out = [];
+    var top = hasNav() ? rc(document.getElementById(NAV)).bottom : 0;
+    for (var i = 0; i < raw.length; i++) {
+      var e = raw[i], r = rc(e), cs = getComputedStyle(e);
+      if (!e.isConnected || r.width < 8 || r.height < 4) continue;
+      if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity || '1') < .05) continue;
+      if (r.right <= 0 || r.bottom <= 0 || r.left >= innerWidth || r.top >= innerHeight) continue;
+      if (r.top + r.height / 2 < top) continue;
+      out.push(e);
+    }
+    out.sort(function (a, b) {
+      var ar = rc(a), br = rc(b);
+      return Math.abs(ar.top - br.top) > 8 ? ar.top - br.top : ar.left - br.left;
+    });
+    return out;
+  }
+  function annotationLabel(e) {
+    if (!e) return '';
+    var text = (e.getAttribute('data-wr-hh-annotation-label') ||
+      e.getAttribute('title') || e.textContent || '').replace(/\s+/g, ' ').trim();
+    if (!text || text === '划线评论') return '划线评论';
+    return text || '划线评论';
+  }
+  function clearAnnotation() {
+    var old = $$('[data-wr-hh-annotation]');
+    for (var i = 0; i < old.length; i++) old[i].removeAttribute('data-wr-hh-annotation');
+    var had = annotationEl;
+    annotationEl = null;
+    if (had) had.classList.remove('wr-hh-annotation');
+  }
+  function paintAnnotation(e) {
+    var old = $$('.wr-hh-annotation');
+    for (var i = 0; i < old.length; i++) old[i].classList.remove('wr-hh-annotation');
+    annotationEl = e;
+    if (!e) return;
+    e.classList.add('wr-hh-annotation');
+    var label = annotationLabel(e);
+    e.setAttribute('data-wr-hh-annotation-label', label);
+    e.setAttribute('aria-label', label + '，按 A 查看评论');
+    diag({ annotation: true, text: annotationLabel(e), index: annotationItems().indexOf(e) + 1 });
+  }
+  function selectAnnotation(step) {
+    if (!isReader() || openPanel()) return false;
+    var items = annotationItems();
+    if (!items.length) { clearAnnotation(); showHint('本页没有可选的划线评论'); return false; }
+    var at = annotationEl ? items.indexOf(annotationEl) : -1;
+    if (at < 0) at = 0;
+    else at = (at + (step < 0 ? -1 : 1) + items.length) % items.length;
+    paintAnnotation(items[at]);
+    return true;
+  }
+  /* The reviews panel exposes a native close button; use it before the
+     background bridge so B is independent of MV3 worker wake-up. */
+  function floatPanelCloseButton() {
+    var panel = openPanel();
+    if (!panel) return null;
+    var selectors = [
+      '.reader_float_panel_header_closeBtn',
+      '[class*="float_panel"] [class*="closeBtn"]',
+      '[class*="float_panel"] [class*="close"]'
+    ];
+    for (var i = 0; i < selectors.length; i++) {
+      var list = $$(selectors[i]);
+      for (var j = 0; j < list.length; j++) {
+        var e = list[j], r = rc(e);
+        if (!e.isConnected || !shown(e) || r.width < 8 || r.height < 8) continue;
+        if (!panel.contains(e) && !e.closest('[class*="float_panel"]')) continue;
+        return e;
+      }
+    }
+    return null;
+  }
+  function clickFloatPanelClose() {
+    var button = floatPanelCloseButton();
+    if (!button) return false;
+    var context = beginReaderBusy('close');
+    watchReaderBusy('close', context);
+    try { button.click(); return true; } catch (x) { finishReaderBusy(false); }
+    return false;
+  }
+  function openAnnotation() {
+    if (!annotationEl || !annotationEl.isConnected) return false;
+    annotationEl.setAttribute('data-wr-hh-annotation', '1');
+    /*
+     * The site installs a native click handler on the underline itself, so
+     * element.click() opens the review panel without touching the MV3 worker.
+     * Keep the bridge as a fallback for reader builds that only accept trusted
+     * input; the retry path there also survives a cold service worker.
+     */
+    var context = beginReaderBusy('annotation');
+    watchReaderBusy('annotation', context);
+    try {
+      annotationEl.click();
+      return true;
+    } catch (x) {
+      readerInput('annotation');
+      return true;
+    }
+  }
   /* ================= 翻页（点站内按钮） ================= */
   var pCache = {};
   function pageBtn(dir) {
@@ -802,22 +1004,166 @@
   }
 
   /* ================= 站方入口 ================= */
+  var readerBusyState = null;
+  var READER_BUSY_LABELS = {
+    'font-previous': '正在调整字号',
+    'font-next': '正在调整字号',
+    'activate': '正在应用',
+    'catalog': '正在打开目录',
+    'settings': '正在打开阅读设置',
+    'close': '正在关闭面板',
+    'annotation': '正在打开评论'
+  };
+  function readerFontLevel() {
+    var match = document.body && document.body.className.match(/wr_reader_font_size_level_(\d+)/);
+    return match ? match[1] : '';
+  }
+  function selectionSignature() {
+    return $$('.font-panel-content-fonts-item').map(function (e) {
+      var cs = getComputedStyle(e);
+      return [
+        e.className,
+        e.getAttribute('aria-selected') || '',
+        e.getAttribute('data-selected') || '',
+        e.style.fontFamily || '',
+        cs.fontFamily,
+        cs.fontWeight
+      ].join('|');
+    }).join('||');
+  }
+  function readerTextStyleSignature() {
+    var host = $('.readerChapterContent,.wr_horizontalReader') || document.body;
+    if (!host) return '';
+    var cs = getComputedStyle(host);
+    return [host.className, cs.fontFamily, cs.fontSize, cs.fontWeight].join('|');
+  }
+  function busyContext(action) {
+    var context = {
+      kind: '',
+      action: action,
+      beforeFontLevel: readerFontLevel(),
+      selectionSignature: '',
+      textStyleSignature: '',
+      beforePanel: action === 'close' ? openPanel() : null
+    };
+    if (action === 'activate' && focusEl && focusEl.matches &&
+        focusEl.matches('.font-panel-content-fonts-item')) {
+      context.kind = 'font';
+      context.selectionSignature = selectionSignature();
+      context.textStyleSignature = readerTextStyleSignature();
+    }
+    return context;
+  }
+  function readerBusyLabel(action, context) {
+    if (action === 'activate' && context && context.kind === 'font') return '正在切换字体';
+    return READER_BUSY_LABELS[action] || '正在应用';
+  }
+  function paintReaderBusy(action, context) {
+    var el = $('#wr-hh-busy');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'wr-hh-busy';
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      el.innerHTML = '<span class="wr-hh-spinner" aria-hidden="true"></span><strong></strong>';
+      document.body.appendChild(el);
+    }
+    el.querySelector('strong').textContent = readerBusyLabel(action, context);
+    document.body.classList.add('wr-hh-reader-busy');
+    invalidateNow();
+  }
+  function beginReaderBusy(action) {
+    if (readerBusyState) return readerBusyState.context;
+    var context = busyContext(action);
+    readerBusyState = {
+      action: action,
+      context: context,
+      started: Date.now(),
+      timer: null
+    };
+    paintReaderBusy(action, context);
+    return context;
+  }
+  function readerBusyComplete(action, context) {
+    if (action === 'font-previous' || action === 'font-next') {
+      return readerFontLevel() !== context.beforeFontLevel;
+    }
+    if (action === 'catalog') {
+      return $$('.readerCatalog').some(function (p) {
+        return shown(p) && p.matches('.readerCatalog');
+      });
+    }
+    if (action === 'settings') {
+      var panel = openPanel();
+      return !!(panel && shown(panel) &&
+        (panel.matches('.font-panel-content') || panel.querySelector('.font-panel-content')));
+    }
+    if (action === 'close') return !openPanel();
+    if (action === 'annotation') return !!openPanel();
+    if (action === 'activate' && context.kind === 'font') {
+      return selectionSignature() !== context.selectionSignature ||
+        readerTextStyleSignature() !== context.textStyleSignature;
+    }
+    return true;
+  }
+  function finishReaderBusy(ok) {
+    var state = readerBusyState;
+    readerBusyState = null;
+    if (state && state.timer) clearTimeout(state.timer);
+    var el = $('#wr-hh-busy');
+    if (el) el.remove();
+    if (document.body) document.body.classList.remove('wr-hh-reader-busy');
+    invalidateNow();
+    if (!ok) showHint('操作未完成，请重试');
+  }
+  function watchReaderBusy(action, context) {
+    var state = readerBusyState;
+    if (!state || state.context !== context) return;
+    function poll() {
+      if (!readerBusyState || readerBusyState !== state) return;
+      var elapsed = Date.now() - state.started;
+      if (readerBusyComplete(action, context)) {
+        if (elapsed < 200) {
+          state.timer = setTimeout(poll, 200 - elapsed);
+        } else {
+          finishReaderBusy(true);
+        }
+        return;
+      }
+      if (elapsed >= 5000) {
+        finishReaderBusy(false);
+        return;
+      }
+      state.timer = setTimeout(poll, 50);
+    }
+    state.timer = setTimeout(poll, 30);
+  }
   var readerInputPending = false;
   function readerInput(action) {
     if (readerInputPending) return true;
     readerInputPending = true;
+    if (!readerBusyState) {
+      var initialBusyContext = beginReaderBusy(action);
+      watchReaderBusy(action, initialBusyContext);
+    }
+    var beforeFontLevel = action === 'font-previous' || action === 'font-next'
+      ? document.body.className.match(/wr_reader_font_size_level_(\d+)/) : null;
+    beforeFontLevel = beforeFontLevel ? beforeFontLevel[1] : '';
     var activating = action === 'activate' ? focusEl : null;
     if (activating) activating.setAttribute('data-wr-hh-activate', '1');
     var closing = action === 'close' ? openPanel() : null;
     if (closing) closing.setAttribute('data-wr-hh-active-panel', '1');
-    chrome.runtime.sendMessage({ type: 'reader-input', action: action }, function (result) {
+    function finish(resultFailed, result) {
       if (closing) closing.removeAttribute('data-wr-hh-active-panel');
       if (activating) activating.removeAttribute('data-wr-hh-activate');
-      if (chrome.runtime.lastError || !result || !result.ok) {
-        diag({ readerInput: action, error: chrome.runtime.lastError ?
-          chrome.runtime.lastError.message : (result && result.error) || 'Input service rejected action' });
+      if (resultFailed && beforeFontLevel) {
+        var afterFontLevel = document.body.className.match(/wr_reader_font_size_level_(\d+)/);
+        if (afterFontLevel && afterFontLevel[1] !== beforeFontLevel) resultFailed = false;
+      }
+      if (resultFailed) {
+        diag({ readerInput: action, error: (result && result.error) || 'Input service rejected action' });
         readerInputPending = false;
-        showHint('操作未完成，请重试');
+        finishReaderBusy(false);
         return;
       }
       setTimeout(function () {
@@ -849,7 +1195,24 @@
           } else focusAtEl(focusEl);
         }
       }, 100);
-    });
+    }
+    function send(attempt) {
+      chrome.runtime.sendMessage({ type: 'reader-input', action: action }, function (result) {
+        var lastError = chrome.runtime.lastError;
+        var message = (lastError && lastError.message) ||
+          (!result || result.ok ? '' : result.error) || '';
+        if ((lastError || !result || !result.ok) && attempt < 2 &&
+            /message port closed|service worker/i.test(message)) {
+          /* MV3 workers can be asleep on the first message after idle. Retry
+             once after the wake-up event has had a chance to register. */
+          setTimeout(function () { send(attempt + 1); }, attempt === 0 ? 450 : 1200);
+          return;
+        }
+        finish(!!lastError || !result || !result.ok,
+          result || { error: message });
+      });
+    }
+    send(0);
     return true;
   }
   function openCatalog() {
@@ -925,9 +1288,12 @@
       reanchor();
       return;
     }
-    /* ① 站方浮层（目录/设置/笔记）打开 → 先关掉它 */
+    /* ① 站方浮层（目录/设置/笔记/评论）打开 → 先关掉它 */
     var panel = openPanel();
     if (panel) {
+      /* Reviews panels use their own close control; this also avoids the
+         cold-MV3 first-message race that previously made B ineffective. */
+      if (clickFloatPanelClose()) return;
       readerInput('close');
       return;
     }
@@ -1019,6 +1385,18 @@
   /* ⚠️ 只用真实存在的站内章节：'/'=首页、'/web/shelf'=书架。
        自造的「我的」没有对应页面（点击无效）⇒ v7 移除，避免"点了没反应"。 */
   var TABS = [{ t: '书架', h: '/web/shelf' }, { t: '发现', h: '/' }, { t: '搜索', search: true }];
+  function activateTab(tab) {
+    var item = TABS[+tab.getAttribute('data-i')];
+    if (!item) return;
+    if (item.search) openSearch();
+    else if (item.h === '/') {
+      discoveryMode = 'suggestions';
+      clearSuggestions();
+      try { sessionStorage.setItem('wr-hh-discovery-mode', discoveryMode); } catch (x) {}
+      go(item.h);
+    }
+    else go(item.h);
+  }
   var discoveryMode = 'suggestions', pendingOriginKey = '';
   var suggestionBatch = null;
   try { discoveryMode = sessionStorage.getItem('wr-hh-discovery-mode') || 'suggestions'; } catch (x) {}
@@ -1092,7 +1470,7 @@
     ['期刊杂志','1700000'],['原版书','1800000'],['医学健康','2100000'],['男生小说','1900001'],
     ['女生小说','2000001']
   ];
-  var loadingState = null, loadingTimer = null;
+  var loadingState = null, loadingTimer = null, navigationId = 0;
   function beginLoading(href, text) {
     var path = new URL(href, location.href).pathname;
     loadingState = { href: path, text: text || '正在加载', started: Date.now() };
@@ -1109,7 +1487,11 @@
         var button = ev.target.closest('[data-load]');
         if (!button) return;
         if (button.dataset.load === 'back') { finishLoading(); go('/web/shelf'); }
-        else { var href = loadingState.href; beginLoading(href); location.href = href; }
+        else if (loadingState && loadingState.href) {
+          /* A retry must not reuse go(): the failed target can be the current
+             path, and go() intentionally short-circuits same-path switches. */
+          window.location.assign(loadingState.href);
+        }
       });
       document.body.appendChild(el);
     }
@@ -1152,7 +1534,6 @@
     } else if (age > 12000) {
       var el = $('#wr-hh-loading');
       if (el && el.querySelector('[hidden]')) {
-        el.querySelector('strong').textContent = '加载时间较长';
         el.querySelector('[hidden]').hidden = false;
         el.classList.add('wr-hh-load-slow');
         invalidateNow(); focusAtEl(el.querySelector('button'));
@@ -1171,7 +1552,7 @@
   function syncDiscovery() {
     var discovery = location.pathname === '/' || /^\/web\/category\//.test(location.pathname);
     var mode = location.pathname === '/' ? discoveryMode : /^\/web\/category\/\d+$/.test(location.pathname) ? 'categories' : 'ranks';
-    if (discovery) document.body.dataset.wrHhDiscovery = mode;
+    if (discovery) { document.body.dataset.wrHhDiscovery = mode; primeSuggestions(); }
     else delete document.body.dataset.wrHhDiscovery;
     var sub = $('#' + NAV + ' .wr-hh-subnav');
     if (!discovery) { if (sub) sub.remove(); document.body.style.removeProperty('--hh-header'); return; }
@@ -1209,7 +1590,9 @@
         var link = ev.target.closest('a'); if (!link) return;
         ev.preventDefault(); go(link.getAttribute('href'));
       });
-      var content = $('.wr_index_page_content_wrapper'); if (content) content.appendChild(grid);
+      var route = document.getElementById('wr-hh-route-view');
+      var content = (route && !route.hidden && route.querySelector('.wr_index_page_content_wrapper')) || $('.wr_index_page_content_wrapper');
+      if (content) content.appendChild(grid);
     }
     try { pendingOriginKey = sessionStorage.getItem('wr-hh-discovery-return') || pendingOriginKey; } catch (x) {}
     if (location.pathname === '/' && mode === 'suggestions') restoreSuggestions();
@@ -1219,17 +1602,295 @@
     }
   }
   function navWanted() { return !isReader(); }
-  function go(href) {
-    if (new URL(href, location.href).pathname === location.pathname) { syncNav(); return; }
-    beginLoading(href, href === '/web/shelf' ? '正在加载书架' : '正在加载发现');
-    var l = $$('a[href]').filter(function (e) {
-      return new URL(e.getAttribute('href'), location.href).pathname === href && !mine(e) && !e.closest('#wr-hh-categories');
-    })[0];
-    requestAnimationFrame(function () {
-      if (l) { try { l.click(); return; } catch (e) {} }
-      location.href = href;
+  /* Discovery is fetched as server HTML, so its buttons have no Vue handlers.
+     Reuse the SSR recommendation payload and implement the small local controls here. */
+  var suggestionBooks = [], suggestionIndex = 0;
+  function md5(s) {
+    function add32(a, b) { return (a + b) | 0; }
+    function rol(n, c) { return (n << c) | (n >>> (32 - c)); }
+    function cmn(q, a, b, x, shift, t) { return add32(rol(add32(add32(a, q), add32(x, t)), shift), b); }
+    function ff(a, b, c, d, x, shift, t) { return cmn((b & c) | ((~b) & d), a, b, x, shift, t); }
+    function gg(a, b, c, d, x, shift, t) { return cmn((b & d) | (c & (~d)), a, b, x, shift, t); }
+    function hh(a, b, c, d, x, shift, t) { return cmn(b ^ c ^ d, a, b, x, shift, t); }
+    function ii(a, b, c, d, x, shift, t) { return cmn(c ^ (b | (~d)), a, b, x, shift, t); }
+    function cycle(x, k) {
+      var a = x[0], b = x[1], c = x[2], d = x[3];
+      a = ff(a, b, c, d, k[0], 7, -680876936); d = ff(d, a, b, c, k[1], 12, -389564586); c = ff(c, d, a, b, k[2], 17, 606105819); b = ff(b, c, d, a, k[3], 22, -1044525330);
+      a = ff(a, b, c, d, k[4], 7, -176418897); d = ff(d, a, b, c, k[5], 12, 1200080426); c = ff(c, d, a, b, k[6], 17, -1473231341); b = ff(b, c, d, a, k[7], 22, -45705983);
+      a = ff(a, b, c, d, k[8], 7, 1770035416); d = ff(d, a, b, c, k[9], 12, -1958414417); c = ff(c, d, a, b, k[10], 17, -42063); b = ff(b, c, d, a, k[11], 22, -1990404162);
+      a = ff(a, b, c, d, k[12], 7, 1804603682); d = ff(d, a, b, c, k[13], 12, -40341101); c = ff(c, d, a, b, k[14], 17, -1502002290); b = ff(b, c, d, a, k[15], 22, 1236535329);
+      a = gg(a, b, c, d, k[1], 5, -165796510); d = gg(d, a, b, c, k[6], 9, -1069501632); c = gg(c, d, a, b, k[11], 14, 643717713); b = gg(b, c, d, a, k[0], 20, -373897302);
+      a = gg(a, b, c, d, k[5], 5, -701558691); d = gg(d, a, b, c, k[10], 9, 38016083); c = gg(c, d, a, b, k[15], 14, -660478335); b = gg(b, c, d, a, k[4], 20, -405537848);
+      a = gg(a, b, c, d, k[9], 5, 568446438); d = gg(d, a, b, c, k[14], 9, -1019803690); c = gg(c, d, a, b, k[3], 14, -187363961); b = gg(b, c, d, a, k[8], 20, 1163531501);
+      a = gg(a, b, c, d, k[13], 5, -1444681467); d = gg(d, a, b, c, k[2], 9, -51403784); c = gg(c, d, a, b, k[7], 14, 1735328473); b = gg(b, c, d, a, k[12], 20, -1926607734);
+      a = hh(a, b, c, d, k[5], 4, -378558); d = hh(d, a, b, c, k[8], 11, -2022574463); c = hh(c, d, a, b, k[11], 16, 1839030562); b = hh(b, c, d, a, k[14], 23, -35309556);
+      a = hh(a, b, c, d, k[1], 4, -1530992060); d = hh(d, a, b, c, k[4], 11, 1272893353); c = hh(c, d, a, b, k[7], 16, -155497632); b = hh(b, c, d, a, k[10], 23, -1094730640);
+      a = hh(a, b, c, d, k[13], 4, 681279174); d = hh(d, a, b, c, k[0], 11, -358537222); c = hh(c, d, a, b, k[3], 16, -722521979); b = hh(b, c, d, a, k[6], 23, 76029189);
+      a = hh(a, b, c, d, k[9], 4, -640364487); d = hh(d, a, b, c, k[12], 11, -421815835); c = hh(c, d, a, b, k[15], 16, 530742520); b = hh(b, c, d, a, k[2], 23, -995338651);
+      a = ii(a, b, c, d, k[0], 6, -198630844); d = ii(d, a, b, c, k[7], 10, 1126891415); c = ii(c, d, a, b, k[14], 15, -1416354905); b = ii(b, c, d, a, k[5], 21, -57434055);
+      a = ii(a, b, c, d, k[12], 6, 1700485571); d = ii(d, a, b, c, k[3], 10, -1894986606); c = ii(c, d, a, b, k[10], 15, -1051523); b = ii(b, c, d, a, k[1], 21, -2054922799);
+      a = ii(a, b, c, d, k[8], 6, 1873313359); d = ii(d, a, b, c, k[15], 10, -30611744); c = ii(c, d, a, b, k[6], 15, -1560198380); b = ii(b, c, d, a, k[13], 21, 1309151649);
+      a = ii(a, b, c, d, k[4], 6, -145523070); d = ii(d, a, b, c, k[11], 10, -1120210379); c = ii(c, d, a, b, k[2], 15, 718787259); b = ii(b, c, d, a, k[9], 21, -343485551);
+      x[0] = add32(a, x[0]); x[1] = add32(b, x[1]); x[2] = add32(c, x[2]); x[3] = add32(d, x[3]);
+    }
+    function block(s) { var out = [], i; for (i = 0; i < 64; i += 4) out[i >> 2] = s.charCodeAt(i) + (s.charCodeAt(i + 1) << 8) + (s.charCodeAt(i + 2) << 16) + (s.charCodeAt(i + 3) << 24); return out; }
+    function word(n) { var out = '', i; for (i = 0; i < 4; i++) out += ('0' + ((n >> (i * 8)) & 255).toString(16)).slice(-2); return out; }
+    var state = [1732584193, -271733879, -1732584194, 271733878], tail = [], len = s.length, i;
+    for (i = 64; i <= len; i += 64) cycle(state, block(s.slice(i - 64, i)));
+    s = s.slice(i - 64);
+    for (i = 0; i < 16; i++) tail[i] = 0;
+    for (i = 0; i < s.length; i++) tail[i >> 2] |= s.charCodeAt(i) << ((i % 4) * 8);
+    tail[i >> 2] |= 128 << ((i % 4) * 8);
+    if (i > 55) { cycle(state, tail); for (i = 0; i < 16; i++) tail[i] = 0; }
+    tail[14] = len * 8;
+    cycle(state, tail);
+    return word(state[0]) + word(state[1]) + word(state[2]) + word(state[3]);
+  }
+  function encodeBookId(value) {
+    value = String(value);
+    if (/^\d*$/.test(value)) {
+      var parts = [];
+      for (var i = 0; i < value.length; i += 9) parts.push(parseInt(value.slice(i, i + 9), 10).toString(16));
+      return ['3', parts];
+    }
+    var hex = '';
+    for (var j = 0; j < value.length; j++) hex += value.charCodeAt(j).toString(16);
+    return ['4', [hex]];
+  }
+  function encryptBookId(value) {
+    value = String(value);
+    var hash = md5(value), enc = encodeBookId(value);
+    var prefix = hash.slice(0, 3) + enc[0] + '2' + hash.slice(-2);
+    for (var i = 0; i < enc[1].length; i++) {
+      var size = enc[1][i].length.toString(16);
+      prefix += (size.length === 1 ? '0' : '') + size + enc[1][i];
+      if (i < enc[1].length - 1) prefix += 'g';
+    }
+    if (prefix.length < 20) prefix += hash.slice(0, 20 - prefix.length);
+    return prefix + md5(prefix).slice(0, 3);
+  }
+  function readerHref(book) {
+    if (book && book.href) return book.href;
+    if (book && book.deepLink) {
+      var deep = /[?&]v=([^&#]+)/.exec(book.deepLink);
+      if (deep) return '/web/reader/' + deep[1];
+    }
+    return '/web/reader/' + encryptBookId(book.bookId);
+  }
+  var NUXT_SCRIPT = /<script[^>]*id=["']__NUXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i;
+  function decodeNuxtFlat(text) {
+    var flat = JSON.parse(text || '[]'), memo = {}, active = {};
+    function value(index) {
+      if (typeof index !== 'number') return index;
+      if (active[index]) return null;
+      if (Object.prototype.hasOwnProperty.call(memo, index)) return memo[index];
+      var item = flat[index];
+      if (!Array.isArray(item) && (!item || typeof item !== 'object')) return (memo[index] = item);
+      active[index] = true;
+      if (Array.isArray(item)) {
+        var kind = item[0];
+        if (kind === 'ShallowReactive' || kind === 'Reactive' || kind === 'Ref') { memo[index] = value(item[1]); delete active[index]; return memo[index]; }
+        if (kind === 'EmptyRef') { memo[index] = null; delete active[index]; return null; }
+        if (kind === 'Set' || kind === 'Map') { memo[index] = kind === 'Set' ? [] : {}; delete active[index]; return memo[index]; }
+        var list = []; memo[index] = list;
+        for (var i = 0; i < item.length; i++) list.push(value(item[i]));
+        delete active[index]; return list;
+      }
+      var out = {}; memo[index] = out;
+      for (var key in item) out[key] = value(item[key]);
+      delete active[index]; return out;
+    }
+    return { value: value, flat: flat };
+  }
+  function suggestionBooksFromData(text) {
+    var source = decodeNuxtFlat(text), root = source && source.value(0), entries = root && root.data;
+    var books = [];
+    if (entries) {
+      for (var key in entries) {
+        var entry = entries[key];
+        if (entry && Array.isArray(entry.books) && entry.books.length) { books = entry.books.slice(); break; }
+      }
+    }
+    return books.filter(function (book) { return book && book.bookId && book.title; }).slice(0, 40);
+  }
+  function extractSuggestionBooks(html) {
+    var match = NUXT_SCRIPT.exec(html);
+    if (!match) return [];
+    try { return suggestionBooksFromData(match[1]); } catch (x) { return []; }
+  }
+  /* Server-rendered discovery ships the recommendations in its Nuxt payload but
+     no Vue handlers, so read that payload so the local refresh control can page it. */
+  function primeSuggestions() {
+    if (location.pathname !== '/' || suggestionBooks.length) return;
+    var node = document.getElementById('__NUXT_DATA__');
+    if (!node) return;
+    try {
+      var books = suggestionBooksFromData(node.textContent);
+      if (books.length) { suggestionBooks = books; suggestionIndex = 0; }
+    } catch (x) {}
+  }
+  function suggestionCard(book) {
+    var link = document.createElement('a'); link.className = 'wr_suggestion_card_wrapper'; link.href = readerHref(book);
+    link.setAttribute('rel', 'noopener noreferrer'); link.setAttribute('target', '_self');
+    var content = document.createElement('div'); content.className = 'wr_suggestion_card_content';
+    var cover = document.createElement('div'); cover.className = 'wr_bookCover wr_suggestion_card_cover';
+    var image = document.createElement('img'); image.className = 'wr_bookCover_img'; image.alt = book.title || '书籍封面'; image.src = book.cover || '';
+    cover.appendChild(image); content.appendChild(cover);
+    var info = document.createElement('div'); info.className = 'wr_suggestion_card_content_info';
+    ['title', 'author', 'reason'].forEach(function (field) {
+      var text = document.createElement('div'); text.className = 'wr_suggestion_card_content_' + field;
+      text.textContent = book[field] || (field === 'reason' ? '大家都在读' : '');
+      info.appendChild(text);
+    });
+    content.appendChild(info); link.appendChild(content); return link;
+  }
+  function renderSuggestionBatch() {
+    var host = $('.wr_index_page_top_section_content_suggestions');
+    if (!host || !suggestionBooks.length) return false;
+    var total = Math.ceil(suggestionBooks.length / 4);
+    if (suggestionIndex < 0 || suggestionIndex >= total) suggestionIndex = 0;
+    var books = suggestionBooks.slice(suggestionIndex * 4, suggestionIndex * 4 + 4);
+    while (host.firstChild) host.removeChild(host.firstChild);
+    books.forEach(function (book) { host.appendChild(suggestionCard(book)); });
+    invalidateNow(); return true;
+  }
+  function nextSuggestions() {
+    if (!suggestionBooks.length) return false;
+    /* A restored batch is rendered in a separate overlay. Clear that overlay
+       before paging the underlying recommendation list, otherwise the old
+       four cards keep covering the newly rendered batch. */
+    clearSuggestions();
+    suggestionIndex = (suggestionIndex + 1) % Math.ceil(suggestionBooks.length / 4);
+    renderSuggestionBatch();
+    var action = $$('.wr_index_page_top_section_content_title .wr_index_page_top_section_header_action_link').filter(function (e) { return /换一批/.test(e.textContent || ''); })[0];
+    if (action) focusAtEl(action);
+    return true;
+  }
+  var discoveryCache = null, discoveryCacheAt = 0, discoveryFetch = null;
+  function getDiscoveryHtml(force) {
+    var now = Date.now();
+    if (!force && discoveryCache && now - discoveryCacheAt < 300000) return Promise.resolve(discoveryCache);
+    if (discoveryFetch) return discoveryFetch;
+    discoveryFetch = fetch(new URL('/', location.href).href, { credentials: 'include' })
+      .then(function (response) {
+        if (!response.ok) throw new Error('discovery ' + response.status);
+        return response.text();
+      })
+      .then(function (html) {
+        discoveryCache = html;
+        discoveryCacheAt = Date.now();
+        try { sessionStorage.setItem('wr-hh-discovery-cache', html); sessionStorage.setItem('wr-hh-discovery-cache-at', String(discoveryCacheAt)); } catch (x) {}
+        return html;
+      })
+      .then(function (html) { discoveryFetch = null; return html; }, function (error) { discoveryFetch = null; throw error; });
+    return discoveryFetch;
+  }
+  try {
+    var savedDiscovery = sessionStorage.getItem('wr-hh-discovery-cache');
+    var savedAt = +(sessionStorage.getItem('wr-hh-discovery-cache-at') || 0);
+    if (savedDiscovery && savedAt && Date.now() - savedAt < 300000) { discoveryCache = savedDiscovery; discoveryCacheAt = savedAt; }
+  } catch (x) {}
+  function routeHost() {
+    var host = document.getElementById('wr-hh-route-view');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'wr-hh-route-view';
+      host.className = 'wr-hh-route-view';
+      document.body.appendChild(host);
+    }
+    return host;
+  }
+  function extractRouteView(html) {
+    var parsed = new DOMParser().parseFromString(html, 'text/html');
+    var view = parsed.querySelector('.app_content, .ranking_page_container, #routerView');
+    if (!view) throw new Error('view content missing');
+    return document.importNode(view, true);
+  }
+  function sameDocumentNavigate(href, requestId) {
+    var target = new URL(href, location.href);
+    var isHome = target.pathname === '/';
+    if (!/^\/$|^\/web\/shelf$|^\/web\/category\//.test(target.pathname)) return Promise.reject(new Error('unsupported view'));
+    var request = isHome ? getDiscoveryHtml(false) : fetch(target.href, { credentials: 'include', headers: { 'X-Requested-With': 'XMLHttpRequest' } }).then(function (r) { if (!r.ok) throw new Error('navigation ' + r.status); return r.text(); });
+    return request.then(function (html) {
+      if (requestId !== navigationId) return false;
+      var host = routeHost();
+      var root = document.getElementById('__nuxt') || document.getElementById('app');
+      if (isHome) {
+        var marker = 'class="wr_index_page_content_wrapper';
+        var start = html.indexOf(marker);
+        if (start < 0) throw new Error('discovery content missing');
+        start = html.lastIndexOf('<div', start);
+        var depth = 0, end = start, tag = /<\/?div\b[^>]*>/gi, match;
+        tag.lastIndex = start;
+        while ((match = tag.exec(html))) { if (match[0].charAt(1) === '/') depth--; else if (!/\/\s*>$/.test(match[0])) depth++; if (depth === 0) { end = tag.lastIndex; break; } }
+        if (!end) throw new Error('discovery block incomplete');
+        while (host.firstChild) host.removeChild(host.firstChild);
+        host.innerHTML = html.slice(start, end);
+        suggestionBooks = extractSuggestionBooks(html); suggestionIndex = 0;
+      } else {
+        while (host.firstChild) host.removeChild(host.firstChild);
+        host.appendChild(extractRouteView(html));
+      }
+      if (root) root.hidden = true;
+      host.hidden = false;
+      document.body.classList.toggle('wr-hh-same-document', !isHome);
+      history.pushState({ wrHhView: target.pathname }, '', target.pathname + target.search + target.hash);
+      document.body.classList.remove('wr-hh-searching');
+      focusEl = null; invalidateNow();
+      try { syncNav(); scheduleRefresh(); } catch (x) {}
+      return true;
     });
   }
+  function go(href) {
+    var path = new URL(href, location.href).pathname;
+    if (path === location.pathname) { syncNav(); return; }
+    var requestId = ++navigationId;
+    beginLoading(href, href === '/web/shelf' ? '正在加载书架' : '正在加载发现');
+    sameDocumentNavigate(href, requestId).then(function () {
+      if (requestId === navigationId) settleLoading();
+    }).catch(function () {
+      if (requestId !== navigationId) return;
+      finishLoading();
+      window.location.assign(href);
+    });
+  }
+
+  /* Capture shell-owned rank links before site handlers can start a full navigation. */
+  document.addEventListener('click', function (event) {
+    var target = event.target;
+    var tab = target.closest && target.closest('#' + NAV + ' .wr-hh-tab');
+    if (tab) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      activateTab(tab);
+      return;
+    }
+    var section = target.closest && target.closest('#' + NAV + ' [data-discovery]');
+    if (section) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      setDiscovery(section.dataset.discovery);
+      return;
+    }
+    var refresh = target.closest && target.closest('.wr_index_page_top_section_content_title .wr_index_page_top_section_header_action_link');
+    if (refresh && suggestionBooks.length > 4 && /换一批/.test(refresh.textContent || '')) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+      nextSuggestions();
+      return;
+    }
+    var clicked = target.closest && target.closest('[data-href]');
+    var filter = clicked && clicked.closest('#' + NAV) ? clicked : null;
+    if (!filter) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.stopImmediatePropagation) event.stopImmediatePropagation();
+    focusKey = keyOf(filter);
+    go(filter.dataset.href);
+  }, true);
   function syncNav() {
     var has = document.getElementById(NAV);
     if (navWanted()) {
@@ -1243,18 +1904,6 @@
             '" data-i="' + i + '" aria-label="' + x.t + '" title="' + x.t + '">' +
             (x.search ? icon('search') : x.t) + '</button>';
         }).join('') + '</div>';
-        b.addEventListener('click', function (ev) {
-          var section = ev.target.closest('[data-discovery]');
-          if (section) { setDiscovery(section.dataset.discovery); return; }
-          var filter = ev.target.closest('[data-href]');
-          if (filter) { go(filter.dataset.href); return; }
-          var t = ev.target.closest('.wr-hh-tab');
-          if (!t) return;
-          var tab = TABS[+t.getAttribute('data-i')];
-          if (tab.search) openSearch();
-          else if (+t.getAttribute('data-i') === 1) setDiscovery('suggestions');
-          else go(tab.h);
-        });
         document.body.appendChild(b);
         document.body.classList.add('wr-hh-has-nav');
         invalidateNow();
@@ -1286,6 +1935,11 @@
 
     /* 退出（SELECT → F9，最高优先级） */
     if (k === 'F9') { e.preventDefault(); e.stopPropagation(); hideKbd(); quitApp(); return; }
+
+    if (readerBusyState &&
+        /^(ArrowUp|ArrowDown|ArrowLeft|ArrowRight|PageUp|PageDown|Enter| |Escape|F10|Tab|Insert|Delete|Home|End|Backspace)$/.test(k)) {
+      e.preventDefault(); e.stopPropagation(); return;
+    }
 
     if (readerInputPending && /^(ArrowUp|ArrowDown|ArrowLeft|ArrowRight|PageUp|PageDown|Enter| |Escape|F10|Tab)$/.test(k)) {
       e.preventDefault(); e.stopPropagation(); return;
@@ -1341,7 +1995,7 @@
         mIdx = Math.min(n - 1, mIdx + step2); paintMenu();
         e.preventDefault(); e.stopPropagation(); return;
       }
-      if (k === 'Enter' || k === ' ') { runMenu(); e.preventDefault(); e.stopPropagation(); return; }
+      if (k === 'Enter') { runMenu(); e.preventDefault(); e.stopPropagation(); return; }
       if (k === 'Escape' || k === 'F10') { hideMenu(); e.preventDefault(); e.stopPropagation(); return; }
       return;
     }
@@ -1367,16 +2021,24 @@
       return;
     }
 
-    /* 阅读器内 */
+    /* 阅读器内：左摇杆选择评论划线 */
     if (isReader()) {
+      if (k === 'Insert' || k === 'Delete') {
+        selectAnnotation(k === 'Insert' ? -1 : 1);
+        e.preventDefault(); e.stopPropagation(); return;
+      }
       var retry = retryButton();
       if (retry && (k === 'Enter' || k === ' ')) {
         clearFx(); focusEl = retry; retry.classList.add(FOCUS);
         readerInput('activate'); e.preventDefault(); e.stopPropagation(); return;
       }
-      if (k === 'ArrowLeft' || k === 'PageUp')    { turnPage('prev'); e.preventDefault(); e.stopPropagation(); return; }
-      if (k === 'ArrowRight' || k === 'PageDown' || k === ' ') { turnPage('next'); e.preventDefault(); e.stopPropagation(); return; }
-      if (k === 'Enter' || k === 'F10') { showMenu(); e.preventDefault(); e.stopPropagation(); return; }
+      if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Home')    { turnPage('prev'); e.preventDefault(); e.stopPropagation(); return; }
+      if (k === 'ArrowRight' || k === 'PageDown' || k === 'End' || k === ' ') { turnPage('next'); e.preventDefault(); e.stopPropagation(); return; }
+      if (k === 'Enter') {
+        if (annotationEl && annotationEl.isConnected && openAnnotation()) { e.preventDefault(); e.stopPropagation(); return; }
+        activate(); e.preventDefault(); e.stopPropagation(); return;
+      }
+      if (k === 'F10') { showMenu(); e.preventDefault(); e.stopPropagation(); return; }
       if (k === 'Tab')   { openCatalog(); e.preventDefault(); e.stopPropagation(); return; }
       if (k === 'Escape') { goBack(); e.preventDefault(); e.stopPropagation(); return; }
       return;
@@ -1388,6 +2050,8 @@
     if (k === ' ')        { window.scrollBy(0, innerHeight * 0.85); e.preventDefault(); return; }
     if (k === 'PageDown') { window.scrollBy(0,  innerHeight * 0.85); e.preventDefault(); return; }
     if (k === 'PageUp')   { window.scrollBy(0, -innerHeight * 0.85); e.preventDefault(); return; }
+    if (k === 'Home')     { jumpEdge('top'); e.preventDefault(); e.stopPropagation(); return; }
+    if (k === 'End')      { jumpEdge('bottom'); e.preventDefault(); e.stopPropagation(); return; }
     if (k === 'F10')      { showMenu(); e.preventDefault(); e.stopPropagation(); return; }
     if (k === 'Tab')      { openCatalog(); e.preventDefault(); e.stopPropagation(); return; }
     if (k === 'Escape')   { goBack(); e.preventDefault(); e.stopPropagation(); return; }
@@ -1412,12 +2076,23 @@
   function boot() {
     if (window.top !== window) return;
     loadReturnKey();
+    /* Wake the MV3 service worker once per document so reader actions are hot. */
+    try { chrome.runtime.sendMessage({ type: 'reader-input', action: 'wake' }, function () { void chrome.runtime.lastError; }); } catch (x) {}
+    /* The site sometimes drops a free_go_proxy cookie that bounces every load to
+       an unreachable Tencent gateway. It is not httpOnly, so clear it on boot. */
+    try {
+      if (/(^|;\s*)free_go_proxy=/.test(document.cookie)) {
+        document.cookie = 'free_go_proxy=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/';
+      }
+    } catch (x) {}
     document.addEventListener('click', function (event) {
       if (event.target.closest('.wr_index_page_top_section_content_title .wr_index_page_top_section_header_action_link')) clearSuggestions();
     }, true);
     try {
       new MutationObserver(function (records) {
-        if (records.every(function (m) { return mine(m.target) || m.target.id === 'wr-diag' || !!m.target.closest('#wr-hh-loading,#wr-hh-hint'); })) return;
+        /* The reader renders its first chapter in many small DOM batches. The 700 ms loading timer owns completion during this window, so shell refreshes here only add layout reads to the critical path. */
+        if (isReader() && loadingState) return;
+        if (records.every(function (m) { return mine(m.target) || m.target.id === 'wr-diag' || !!m.target.closest('#wr-hh-loading,#wr-hh-hint,#wr-hh-busy'); })) return;
         invalidateSoon();
         scheduleRefresh();
       })
@@ -1433,17 +2108,21 @@
       }, 100);
     }
     try {
-      var pending = JSON.parse(sessionStorage.getItem('wr-hh-loading') || 'null');
-      if (pending && Date.now() - pending.started < 20000) { loadingState = pending; paintLoading(); }
+      var pending = readPendingLoading();
+      if (pending) { loadingState = pending; paintLoading(); setBootMaskText(pending.text); }
       else sessionStorage.removeItem('wr-hh-loading');
     } catch (x) {}
+    ensureBootMask();
+    document.body.classList.add('wr-hh-perf');
+    primeSuggestions();
     syncNav(); scheduleRefresh();
+    requestAnimationFrame(releaseBootMask);
     setInterval(function () {
       if (location.pathname + location.search !== last) {
         last = location.pathname + location.search;
         loadReturnKey();
         document.body.classList.remove('wr-hh-searching');
-        focusEl = null; invalidateNow(); clearFx(); hideMenu(); pCache = {};
+        focusEl = null; clearAnnotation(); invalidateNow(); clearFx(); hideMenu(); pCache = {};
         setTimeout(function () { syncNav(); }, 120);
         /* ⭐⭐ v7：换页后【轮询】直到候选元素渲染出来再锚定焦点（见 anchorFocus 说明） */
         setTimeout(anchorFocus, 900);
@@ -1457,11 +2136,25 @@
       if (!restoreBookFocus()) focusFirst();
     }, 2000);
     window.addEventListener('resize', function () { invalidateNow(); syncNav(); });
-    /* 焦点元素被移除时自动重锚（用身份键找回同一个逻辑条目） */
-    setInterval(function () {
+    /* 焦点元素被移除时自动重锚（用身份键找回同一个逻辑条目）
+       空闲时放宽到 4s，交互/路由变化后恢复 900ms，避免静止页面持续做布局扫描。 */
+    var focusSweepTimer = null, lastActivityAt = Date.now();
+    function focusSweep() {
       if (loadingState) return;
-      if (isReader() && !menuEl() && !kbdVisible() && !openPanel()) { syncRetry(); return; }
-      if (!menuEl() && !kbdVisible() && restoreBookFocus()) return;
+      /* Reader canvas owns its frame budget. Only re-anchor an open overlay
+         here; the catalog can render after readerInput's initial 100 ms pass. */
+      if (isReader()) {
+        var readerPanel = !menuEl() && !kbdVisible() ? openPanel() : null;
+        if (readerPanel && (!focusEl || !document.body.contains(focusEl) || !readerPanel.contains(focusEl))) {
+          invalidateNow();
+          focusAt(0);
+        }
+        return;
+      }
+      if (!menuEl() && !kbdVisible()) {
+        if (syncRetry()) return;
+        if (restoreBookFocus()) return;
+      }
       var activePanel = !menuEl() && !kbdVisible() ? openPanel() : null;
       if (activePanel && (!focusEl || !activePanel.contains(focusEl))) {
         invalidateNow();
@@ -1481,7 +2174,24 @@
       if (again) { focusEl = again; clearFx();
         try { again.classList.add(FOCUS); } catch (e) {} }
       else if (!focusEl || !focusEl.isConnected) { focusAt(0); }
-    }, 900);
+    }
+    function scheduleFocusSweep() {
+      var idle = Date.now() - lastActivityAt > 6000;
+      var delay = menuEl() || kbdVisible() || openPanel() ? 250 : (idle ? 4000 : 900);
+      focusSweepTimer = setTimeout(function () {
+        focusSweepTimer = null;
+        focusSweep();
+        scheduleFocusSweep();
+      }, delay);
+    }
+    function markActivity() {
+      lastActivityAt = Date.now();
+      if (!focusSweepTimer) scheduleFocusSweep();
+    }
+    document.addEventListener('keydown', markActivity, true);
+    document.addEventListener('pointerdown', markActivity, true);
+    window.addEventListener('popstate', markActivity);
+    scheduleFocusSweep();
   }
 
   if (document.readyState === 'loading') {

@@ -1,6 +1,6 @@
 # 微信读书掌机版 · 项目交接文档
 
-> **当前版本：v9，2026-10-10。请先读 `docs/verification-v9.md`。**
+> **当前版本：v10，2026-10-12。请先读 `docs/release-v10.md` 和 `docs/verification-v9.md`。**
 > v8 报告与本文后面的 v7/v6 测试表是历史记录，不代表当前验收结果。
 > 当前扩展加载 `extension/shell.css`；`extension/legacy/style.css` 是未加载的旧样式。
 > 当前启动器使用新增的 `window_guard.py` 匹配实际窗口，修复半屏问题。
@@ -150,7 +150,7 @@
 | 8 | A 打开书籍 | ✅ |
 | 9 | 阅读器内翻页（L1/R1、方向键） | ✅ |
 | 10 | 翻页正确性（canvas 渲染哈希比对） | ✅ |
-| 11 | 掌机菜单（L2 唤出，6 项） | ✅ |
+| 11 | 掌机菜单（START 唤出，6 项） | ✅ |
 | 12 | 菜单内 L1/R1 快速左右移动 | ✅ |
 | 13 | 屏幕键盘输入（拼音 `huozhe` → 《活着》） | ✅ |
 | 14 | 搜索提交（SUPPRESS 旁路放行站方 React） | ✅ |
@@ -178,15 +178,15 @@
 | X | Tab | 目录 |
 | Y | Space | 翻页 |
 | L1 / R1 | PageUp / PageDown | 上一页 / 下一页（菜单内 = 左右移动） |
-| **L2** | **F10** | **唤出掌机菜单**（关键，没有它搜索不可达） |
-| R2 | End | 跳到页面末尾 |
+| L2 / R2 | Home / End | 页面顶部 / 底部（阅读器内 = 上一页 / 下一页） |
+| **START** | **F10** | **唤出掌机菜单**（关键，没有它搜索不可达） |
 | **START+SELECT** | （gptokeyb 内建） | **退出应用**（唯一真正退出的方式） |
 
 ### ⚠️ 关于 START / SELECT 的重要事实
 
 `weread.gptk` 里**故意没有** start/select 条目。原因：
 - **START+SELECT 同时按住** 是 gptokeyb 自己内建的"杀进程"组合键，与 gptk 映射表无关，所以退出始终可用。
-- 单独按 START 或 SELECT 不做任何事（菜单改用 L2 唤出）。
+- 单独按 START 或 SELECT 不做任何事（菜单改用 START 唤出）。
 
 ---
 

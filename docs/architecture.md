@@ -90,7 +90,7 @@ function recordNav(from, dir, to) {
 ### 1.5 搜索链路（最复杂，涉及跨进程时序）
 
 ```
-按 L2(F10) → showMenu()
+按 START(F10) → showMenu()
   → 选「搜索」→ openSearch()
       → findInput() 找到站方搜索框
       → kbdTarget = 输入框; showKbd()
@@ -125,6 +125,7 @@ function recordNav(from, dir, to) {
 2. 【Escape 被吞】typing() 为真时连 Esc 都吃掉 ⇒ v6 允许 Esc 先 blur 再返回
 3. 【候选为空无反馈】⇒ v6 在 diag 里标注 empty 状态，首次按键重试建表
 4. 【菜单项增多】加入「搜索」，支持 L1/R1 快速左右移动
+5. 【肩键扩展】L1/R1 与 L2/R2 均映射为上一页/下一页；START 统一负责唤出掌机菜单。
 ```
 
 ---
@@ -273,7 +274,7 @@ sleep 20   # 首次加载要 20-30 秒
 # 在掌机上执行
 /usr/bin/python3 /storage/roms/ports/browser/vpad.py down      # 按一次十字键↓
 /usr/bin/python3 /storage/roms/ports/browser/vpad.py a         # 按一次 A
-/usr/bin/python3 /storage/roms/ports/browser/vpad.py l2        # 唤出菜单
+/usr/bin/python3 /storage/roms/ports/browser/vpad.py start        # 唤出菜单
 ```
 
 **为什么必须用它**：它创建一个与真实手柄**同 GUID** 的虚拟手柄，走完整链路
@@ -300,7 +301,7 @@ P2 视觉    → getComputedStyle 逐项读
 P3 开书    → ↓ 移焦点 → A → URL 变 /web/reader/
 P4 翻页    → canvas 哈希变化
 P5 返回    → B → 回 /web/shelf
-P6 菜单    → L2 → 6 项 → 左右移动 → B 关
+P6 菜单    → START → 6 项 → 左右移动 → B 关
 P7 搜索    → L2→搜索→逐字母→GO→查结果文本
 P8 退出    → START+SELECT → chrome/gptokeyb 归零、ES 仍 active
 ```

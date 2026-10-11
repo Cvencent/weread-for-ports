@@ -104,6 +104,78 @@ class DiscoveryTest(unittest.TestCase):
         self.assertEqual(selected(self.client), moved,
                          "Page refresh pulled focus back to the restored rank book")
 
+    def test_rank_down_scrolls_the_route_container_with_focus(self):
+        evaluate(self.client, "document.querySelector('#wr-hh-nav [data-i=\"1\"]').click();void 0")
+        wait_for(self.client, "location.pathname==='/' && !!document.querySelector('.wr_suggestion_card_wrapper')")
+        evaluate(self.client, "document.querySelector('#wr-hh-nav [data-discovery=\"ranks\"]').click();void 0")
+        wait_for(self.client, """location.pathname==='/web/category/rising' &&
+          !!document.querySelector('.wr_bookList_item') &&
+          !!document.getElementById('wr-hh-route-view') &&
+          !document.getElementById('wr-hh-loading')""")
+
+        for _ in range(8):
+            before = evaluate(self.client, "document.getElementById('wr-hh-route-view').scrollTop")
+            press(self.client, 'down')
+            time.sleep(0.25)
+            after = evaluate(self.client, "document.getElementById('wr-hh-route-view').scrollTop")
+            if after > before:
+                break
+
+        state = evaluate(self.client, """(function(){
+          var f=document.querySelector('.wr_bookList_item.wr-hh-focus');
+          var h=document.getElementById('wr-hh-route-view');
+          if(!f||!h) return null;
+          var fr=f.getBoundingClientRect(),hr=h.getBoundingClientRect();
+          return {scrollTop:h.scrollTop,top:fr.top,bottom:fr.bottom,
+            hostTop:hr.top,hostBottom:hr.bottom};
+        })()""")
+        self.assertIsNotNone(state, "Down navigation did not focus a rank book")
+        self.assertGreater(state['scrollTop'], 0,
+                           "Moving below the first screen did not scroll the route container")
+        self.assertGreaterEqual(state['bottom'], state['hostTop'],
+                                "Focused rank book is above the visible route container")
+        self.assertLessEqual(state['top'], state['hostBottom'],
+                             "Focused rank book is below the visible route container")
+
+    def probe_rank_reader_return_restores_deep_book_focus(self):
+        evaluate(self.client, "document.querySelector('#wr-hh-nav [data-i=\"1\"]').click();void 0")
+        wait_for(self.client, "location.pathname==='/' && !!document.querySelector('.wr_suggestion_card_wrapper')")
+        evaluate(self.client, "document.querySelector('#wr-hh-nav [data-discovery=\"ranks\"]').click();void 0")
+        wait_for(self.client, """location.pathname==='/web/category/rising' &&
+          !!document.querySelector('.wr_bookList_item') &&
+          !!document.getElementById('wr-hh-route-view') &&
+          !document.getElementById('wr-hh-loading')""")
+
+        focused = None
+        for _ in range(8):
+            press(self.client, 'down')
+            time.sleep(0.25)
+            focused = evaluate(self.client, """(function(){
+              var f=document.querySelector('.wr_bookList_item.wr-hh-focus');
+              return f && {key:(f.querySelector('a[href*="/web/reader/"]')||f).getAttribute('href'),
+                index:Array.from(document.querySelectorAll('.wr_bookList_item')).indexOf(f)};
+            })()""")
+            if focused and focused['index'] >= 4:
+                break
+        self.assertIsNotNone(focused, "Could not focus a deep rank book")
+        self.assertGreaterEqual(focused['index'], 4)
+
+        press(self.client, 'a')
+        wait_for(self.client, "location.pathname.includes('/web/reader/')", 45)
+        press(self.client, 'b')
+        wait_for(self.client, """location.pathname==='/web/category/rising' &&
+          !!document.querySelector('.wr_bookList_item') &&
+          !document.getElementById('wr-hh-loading')""", 45)
+        wait_for(self.client, "!!document.querySelector('.wr_bookList_item.wr-hh-focus')", 15)
+
+        returned = evaluate(self.client, """(function(){
+          var f=document.querySelector('.wr_bookList_item.wr-hh-focus');
+          return f && {href:(f.querySelector('a[href*="/web/reader/"]')||f).getAttribute('href')};
+        })()""")
+        self.assertIsNotNone(returned, "Returning from the reader left no rank book focused")
+        self.assertEqual(returned['href'], focused['key'],
+                         "Returning from the reader lost the focused rank book")
+
 
 if __name__ == '__main__':
     unittest.main()

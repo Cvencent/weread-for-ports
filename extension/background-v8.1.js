@@ -1,7 +1,8 @@
 chrome.runtime.onMessage.addListener(function (message, sender, respond) {
   if (!message || message.type !== 'reader-input') return;
   if (!sender.url || !sender.url.startsWith('https://weread.qq.com/')) return;
-  if (!['catalog', 'settings', 'activate', 'close', 'font-previous', 'font-next'].includes(message.action)) return;
+  if (!['catalog', 'settings', 'activate', 'close', 'font-previous', 'font-next', 'annotation'].includes(message.action)) return;
+  if (message.action === 'wake') { respond({ ok: true }); return; }
   var controller = new AbortController();
   var timeout = setTimeout(function () { controller.abort(); }, 4000);
   fetch('http://127.0.0.1:9223/action', {
