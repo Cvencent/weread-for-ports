@@ -11,6 +11,16 @@ from pathlib import Path
 import paramiko
 
 
+def missing_credentials():
+    """True when the handheld is not configured for this run.
+
+    Device tests are real-hardware acceptance tests, so they cannot run in a
+    checkout that has no credentials. Callers should skip instead of erroring:
+    a missing device is a skipped test, not a broken one.
+    """
+    return not (os.environ.get("WEREAD_HOST") and os.environ.get("WEREAD_PASSWORD"))
+
+
 def connect(host=None, username=None, password=None, port=None):
     host = host or os.environ.get("WEREAD_HOST")
     username = username or os.environ.get("WEREAD_USER", "root")

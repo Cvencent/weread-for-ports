@@ -5,12 +5,14 @@ import time
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from device import connect, evaluate
+from device import connect, evaluate, missing_credentials
 from e2e import press, selected, wait_for
 
 
 class DiscoveryTest(unittest.TestCase):
     def setUp(self):
+        if missing_credentials():
+            self.skipTest("no handheld configured: set WEREAD_HOST and WEREAD_PASSWORD")
         self.client = connect()
         evaluate(self.client, """sessionStorage.removeItem('wr-hh-loading');
           sessionStorage.removeItem('wr-hh-return-key');
