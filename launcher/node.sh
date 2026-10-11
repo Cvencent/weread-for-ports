@@ -108,10 +108,26 @@ done
 #  导致页面打不开（chrome-error://chromewebdata）。这里兜底。
 netguard() {
   ip route 2>/dev/null | grep -q "^default .*dev wlan0" && return 0
-  local ip4 gw
-  ip4=$(ip -4 addr show wlan0 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1)
-  [ -z "$ip4" ] && return 0
-  gw="${ip4%.*}.1"
+  # Prefer the gateway the kernel already knows about: any default route
+  # mentioning wlan0 carries the real one, even when it points at another
+  # interface. Inventing x.y.z.1 is only a last resort, because on a network
+  # whose router is not .1 the route that gets added is simply wrong.
+  local gw
+  gw=$(ip route show 2>/dev/null | awk '/^default/ && /dev wlan0/ {
+             for (i = 1; i <= NF; i++) if ($i == "via") { print $(i + 1); exit }
+           }')
+  if [ -z "$gw" ]; then
+    gw=$(ip route show default 2>/dev/null | awk '{
+             for (i = 1; i <= NF; i++) if ($i == "via") { print $(i + 1); exit }
+           }' | head -n1)
+  fi
+  if [ -z "$gw" ]; then
+    local ip4
+    ip4=$(ip -4 addr show wlan0 2>/dev/null | awk '/inet /{print $2}' | cut -d/ -f1)
+    [ -z "$ip4" ] && return 0
+    gw="${ip4%.*}.1"
+    echo "[weread] netguard: 未找到已知网关，回退猜测 $gw"
+  fi
   ip route add default via "$gw" dev wlan0 metric 100 2>/dev/null
   echo "[weread] netguard: 补回默认路由 via $gw dev wlan0"
 }
