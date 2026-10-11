@@ -57,14 +57,15 @@
 └───────────────────────┬─────────────────────────────────────┘
                         ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  node.sh  （核心启动器 v7，11KB）                             │
+│  node.sh  （核心启动器 v8，约 10KB）                          │
 │   1. 单实例锁 /tmp/weread.lockdir                            │
-│   2. 自检（chrome/扩展/gptk 是否都在）                        │
+│   2. 自检（chrome/扩展/gptk/cdp/worker/rules 是否都在）        │
 │   3. netguard（补回被系统钩子删掉的默认路由）                  │
 │   4. 启动 gptokeyb（手柄→键盘映射器）                          │
 │   5. 启动 chromium --app=...（去地址栏的"应用模式"）           │
-│   6. swaymsg 全屏（不停 ES，直接把窗口盖上去）                  │
-│   7. 三个后台守卫：watchdog / focusguard / fullguard          │
+│   6. 启动 input_bridge.py（目录 / 设置走真实 CDP 输入）         │
+│   7. window_guard.py startup（等窗口并全屏，不停 ES）            │
+│   8. shell_guard 循环（focus / focus-fullscreen / 异常页拉回）  │
 └───────────┬─────────────────────────────┬───────────────────┘
             │                             │
             ▼                             ▼
@@ -113,11 +114,16 @@
 | 掌机路径 | 仓库路径 | 大小 | 作用 |
 |---|---|---|---|
 | `/storage/roms/ports/Weread.sh` | `ports/Weread.sh` | 135 B | ES 入口 |
-| `/storage/roms/ports/weread/node.sh` | `launcher/node.sh` | 10.5 KB | **核心启动器** |
-| `/storage/.config/weread-ext/content.js` | `extension/content.js` | 66 KB | **交互核心** |
-| `/storage/.config/weread-ext/shell.css` | `extension/shell.css` | 24 KB | 当前视觉样式 |
-| `/storage/.config/weread-ext/manifest.json` | `extension/manifest.json` | 502 B | 扩展清单 MV3 |
-| `/storage/roms/ports/browser/weread.gptk` | `launcher/weread.gptk` | 1.2 KB | **手柄映射表** |
+| `/storage/roms/ports/weread/node.sh` | `launcher/node.sh` | 9.8 KB | **核心启动器** |
+| `/storage/roms/ports/weread/window_guard.py` | `launcher/window_guard.py` | 2.1 KB | 焦点 / 全屏修复 |
+| `/storage/roms/ports/weread/input_bridge.py` | `launcher/input_bridge.py` | 7.1 KB | 阅读器动作 → 真实输入 |
+| `/storage/roms/ports/browser/cdp.py` | `launcher/cdp.py` | 5.4 KB | 最小 CDP 客户端（硬依赖） |
+| `/storage/.config/weread-ext/content.js` | `extension/content.js` | 103 KB | **交互核心** |
+| `/storage/.config/weread-ext/shell.css` | `extension/shell.css` | 27 KB | 当前视觉样式 |
+| `/storage/.config/weread-ext/manifest.json` | `extension/manifest.json` | 659 B | 扩展清单 MV3 |
+| `/storage/.config/weread-ext/background-v8.1.js` | `extension/background-v8.1.js` | 1.1 KB | MV3 worker（转发 reader-input） |
+| `/storage/.config/weread-ext/telemetry-rules.json` | `extension/telemetry-rules.json` | 1.4 KB | 上报屏蔽 / 字体缓存规则 |
+| `/storage/roms/ports/browser/weread.gptk` | `launcher/weread.gptk` | 1.4 KB | **手柄映射表** |
 | `/storage/roms/ports/browser/操作说明.txt` | `launcher/操作说明.txt` | 1.9 KB | 给用户看的按键表 |
 
 
@@ -158,9 +164,9 @@
 | 16 | 目录（X 键） | ✅ |
 | 17 | 退出（START+SELECT，进程全清、ES 完好） | ✅ |
 | 18 | 单实例锁（防按键双发） | ✅ |
-| 19 | focusguard（焦点漂移自愈） | ✅ |
-| 20 | fullguard（全屏丢失自愈） | ✅ |
-| 21 | watchdog（死页自愈） | ✅ |
+| 19 | shell_guard 焦点自愈（focus / focus-fullscreen） | ✅ |
+| 20 | shell_guard 全屏自愈（与焦点合并为一次 sway 查询） | ✅ |
+| 21 | shell_guard 死页自愈（异步查 /json，用 cdp.py 拉回） | ✅ |
 | 22 | UI App 化视觉（无标题栏/推广条/滚动条） | ✅ |
 | 23 | 正文 canvas 分页不受 UI 改动影响 | ✅ |
 

@@ -130,7 +130,7 @@ function recordNav(from, dir, to) {
 
 ---
 
-## 2. `node.sh` 内部机制（11KB）
+## 2. `node.sh` 内部机制（约 10KB）
 
 ### 2.1 执行顺序
 
@@ -153,7 +153,7 @@ pkill 残留 chrome + kill_hijackers()
   ↓
 启动 chromium --app=... （见 2.2 参数表）
   ↓
-三个后台守卫 + wait $CHPID
+后台 shell_guard 循环（焦点 / 全屏 / 异常页）+ wait $CHPID
 ```
 
 ### 2.2 Chromium 启动参数（每条都有原因）
@@ -168,25 +168,34 @@ pkill 残留 chrome + kill_hijackers()
 | `--ozone-platform=wayland` | Wayland 会话必需 |
 | `--enable-features=UseOzonePlatform,Vulkan` | 启用上述两特性 |
 | `--enable-gpu-rasterization` | GPU 光栅化 |
-| `--renderer-process-limit=1` | **内存控制**（976MB 很紧） |
+| `--renderer-process-limit=2` | **内存控制**（976MB 很紧；设 1 会让跨页导航频繁换渲染进程） |
 | `--process-per-site` | 减少进程数 |
 | `--js-flags="--max-old-space-size=256"` | **限制 JS 堆**，防 OOM |
 | `--disk-cache-size=52428800` | 缓存 50MB，防占满 TF 卡 |
+| `--media-cache-size=20971520` | 媒体缓存压到 20MB |
+| `--ignore-gpu-blocklist` | 部分 Mali 驱动被误判，强制上面的 Vulkan 参数生效 |
+| `--start-fullscreen` | 启动即全屏，避免首帧半屏 |
 | `--window-size=640,480 --window-position=0,0` | 匹配屏幕 |
 | `--disable-background-networking` | 省流量/省电 |
 | `--remote-debugging-port=9222` | 调试/验证用（仅 127.0.0.1） |
 | `--disable-extensions-except=$EXT --load-extension=$EXT` | 加载扩展 |
 | `--user-data-dir=$PROFILE` | 登录态持久化 |
 
-### 2.3 三个后台守卫
+### 2.3 统一 shell_guard
 
-| 守卫 | 周期 | 职责 | 不做的后果 |
+早期版本是三个独立守卫（`watchdog` 15s / `focusguard` 3s / `fullguard` 4s），
+每轮各起一个 Python 进程去查 sway 和 `/json`。现在合并成一个 5 秒循环：
+
+| 阶段 | 周期 | 职责 | 不做的后果 |
 |---|---|---|---|
-| `watchdog` | 15s | 检测 page 目标是否为 `about:blank`/`chrome-error`/空 → 拉回首页 | 死页卡住 |
-| `focusguard` | 3s | 检测 sway focused 是否还是 chrome，否就抢回 | **手柄全失效**（酷似硬件坏） |
-| `fullguard` | 4s | 检测 fullscreen 是否丢失，丢就补 | 视口变 620×339，UI 压扁 |
+| 奇数 tick | 10s | `window_guard.py focus`：sway 焦点不是 chrome 就抢回 | 焦点漂到 ES ⇒ **手柄全失效**（酷似硬件坏） |
+| 偶数 tick | 10s | `window_guard.py focus-fullscreen`：一次解析 sway 树同时修两件事 | 全屏丢失 ⇒ 视口变 620×339，UI 压扁 |
+| 每 4 tick | 20s | 异步查 `/json`，page 目标是 `about:blank`/`chrome-error`/`chrome://`/空 → 用 `cdp.py` 拉回首页 | 死页卡住 |
 
-**⚠️ watchdog 的血泪教训**：早期版本用 `curl /json | grep -q 'chrome://'` 判断异常，但 `/json` 里**始终**有 Omnibox Popup 这类 `chrome://` 目标 ⇒ 模式恒命中 ⇒ **每 15 秒把页面强行拉回首页** ⇒ 用户刚打开书就被踢回。现在只解析 `type=="page"` 的目标。
+页面健康检查放在后台子 shell 里跑，`urlopen` 超时 4s 也不会阻塞同一轮的焦点/全屏修复；
+`health_pid` 防止慢请求叠加。
+
+**⚠️ 异常页检测的血泪教训**：早期版本用 `curl /json | grep -q 'chrome://'` 判断异常，但 `/json` 里**始终**有 Omnibox Popup 这类 `chrome://` 目标 ⇒ 模式恒命中 ⇒ **每 15 秒把页面强行拉回首页** ⇒ 用户刚打开书就被踢回。现在只解析 `type=="page"` 的目标。
 
 ### 2.4 `cleanup()` 要点
 
@@ -345,14 +354,26 @@ export SWAYSOCK=/var/run/0-runtime-dir/sway-ipc.0.sock
 ## 8. 源码文件指纹（交接基线）
 
 ```
-文件                          大小      说明
-node.sh                       11117 B   启动器 v7
-content.js                    42126 B   交互核心 v6
-shell.css                     24515 B   当前视觉样式
-manifest.json                   364 B   MV3 清单
-weread.gptk                    1198 B   手柄映射 v6
-Weread.sh                       112 B   ES 入口
+文件                            大小      说明
+launcher/node.sh                 9978 B   启动器 v8（单实例锁 + 守卫 + 内存预算）
+launcher/window_guard.py         2159 B   焦点/全屏修复（focus / fullscreen / focus-fullscreen）
+launcher/input_bridge.py         7322 B   阅读器动作 -> 真实浏览器输入（多线程本机 HTTP）
+launcher/cdp.py                  5561 B   最小 CDP 客户端（仅标准库，input_bridge 依赖它）
+extension/content.js           105004 B   交互核心 v9
+extension/shell.css             27179 B   当前视觉样式
+extension/manifest.json           659 B   MV3 清单
+extension/background-v8.1.js     1078 B   MV3 service worker（转发 reader-input）
+extension/telemetry-rules.json    1466 B   屏蔽上报 / 字体缓存规则
+launcher/weread.gptk             1418 B   手柄映射 v6
+ports/Weread.sh                   135 B   ES 入口
+ports/install.sh                 1656 B   安装（同时装到 weread/ 与 browser/）
+ports/uninstall.sh                782 B   卸载（与 install.sh 对称）
 ```
+
+> ⚠️ `launcher/cdp.py` 是 **运行时硬依赖**：`input_bridge.py` 会 `import cdp`，
+> `node.sh` 的异常页恢复也执行 `python3 "$CDP_TOOL"`。它必须同时存在于
+> `ports/weread/` 与 `ports/browser/`，`install.sh` 负责放置，`tests/deploy.py`
+> 与 `tests/final_state.py` 负责同步，缺失时 `node.sh` 的 selfcheck 会直接报错。
 
 > 若你改动后体积/行为与上表差异较大，说明基线已变，请更新本节。
 
