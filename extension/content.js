@@ -127,9 +127,15 @@
     return false;
   }
   function isReader() {
-    var reader = $('.wr_horizontalReader,.readerChapterContent_container');
-    return /\/web\/reader\//.test(location.pathname) ||
-           (reader && shown(reader));
+    if (/\/web\/reader\//.test(location.pathname)) return true;
+    /* The route check alone is not enough: a book can render its container
+       lazily, and a previous chapter's container can linger behind it. Testing
+       only the first match let a hidden stale container hide the visible one,
+       which is enough to send navWanted/candidates/focusSweep down the browsing
+       branch while the reader is actually on screen. */
+    var found = $$('.wr_horizontalReader,.readerChapterContent_container');
+    for (var i = 0; i < found.length; i++) if (shown(found[i])) return true;
+    return false;
   }
   function hasNav() { return !!document.getElementById(NAV); }
   function menuEl() { return document.getElementById(MENU); }

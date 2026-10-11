@@ -109,9 +109,11 @@ class NavigationContractTests(unittest.TestCase):
 
     def test_reader_state_ignores_hidden_stale_containers(self):
         js = (ROOT / "extension/content.js").read_text(encoding="utf-8")
-        self.assertIn("var reader = $('.wr_horizontalReader,.readerChapterContent_container');", js)
-        self.assertIn("return /\\/web\\/reader\\//.test(location.pathname) ||", js)
-        self.assertIn("(reader && shown(reader));", js)
+        # The reader route still decides on its own, and every container is
+        # checked for visibility, so a hidden stale node cannot mask the live one.
+        self.assertIn("if (/\\/web\\/reader\\//.test(location.pathname)) return true;", js)
+        self.assertIn("$$('.wr_horizontalReader,.readerChapterContent_container')", js)
+        self.assertIn("for (var i = 0; i < found.length; i++) if (shown(found[i])) return true;", js)
 
     def test_same_document_route_layer_is_visible_for_every_supported_view(self):
         js = (ROOT / "extension/content.js").read_text(encoding="utf-8")
