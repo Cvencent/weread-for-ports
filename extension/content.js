@@ -2127,9 +2127,12 @@
     /* 浏览模式（首页 / 书架 / 详情） */
     if (/^Arrow/.test(k)) { move(k.replace('Arrow', '').toLowerCase()); e.preventDefault(); e.stopPropagation(); return; }
     if (k === 'Enter')    { activate(); e.preventDefault(); e.stopPropagation(); return; }
-    if (k === ' ')        { window.scrollBy(0, innerHeight * 0.85); e.preventDefault(); return; }
-    if (k === 'PageDown') { window.scrollBy(0,  innerHeight * 0.85); e.preventDefault(); return; }
-    if (k === 'PageUp')   { window.scrollBy(0, -innerHeight * 0.85); e.preventDefault(); return; }
+    /* Scroll keys stop propagation like every other consumed key here: the
+       shell handles them in the capture phase, so the site must not also see
+       the keydown (space in particular activates the site's own controls). */
+    if (k === ' ')        { window.scrollBy(0, innerHeight * 0.85); e.preventDefault(); e.stopPropagation(); return; }
+    if (k === 'PageDown') { window.scrollBy(0,  innerHeight * 0.85); e.preventDefault(); e.stopPropagation(); return; }
+    if (k === 'PageUp')   { window.scrollBy(0, -innerHeight * 0.85); e.preventDefault(); e.stopPropagation(); return; }
     if (k === 'Home')     { jumpEdge('top'); e.preventDefault(); e.stopPropagation(); return; }
     if (k === 'End')      { jumpEdge('bottom'); e.preventDefault(); e.stopPropagation(); return; }
     if (k === 'F10')      { showMenu(); e.preventDefault(); e.stopPropagation(); return; }
