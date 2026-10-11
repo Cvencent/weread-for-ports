@@ -906,15 +906,24 @@
     var out = [];
     var top = hasNav() ? rc(document.getElementById(NAV)).bottom : 0;
     for (var i = 0; i < raw.length; i++) {
-      var e = raw[i], r = rc(e), cs = getComputedStyle(e);
-      if (!e.isConnected || r.width < 8 || r.height < 4) continue;
-      if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity || '1') < .05) continue;
+      var e = raw[i];
+      /* The cheap tests run before anything forces layout: a stale or tiny
+         wrapper should not cost a style read, let alone a rect. */
+      if (!e.isConnected) continue;
+      var r = rc(e);
+      if (r.width < 8 || r.height < 4) continue;
       if (r.right <= 0 || r.bottom <= 0 || r.left >= innerWidth || r.top >= innerHeight) continue;
       if (r.top + r.height / 2 < top) continue;
+      var cs = getComputedStyle(e);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || parseFloat(cs.opacity || '1') < .05) continue;
+      /* Keep the rect: the sort below used to re-measure both elements of every
+         comparison, which cost O(n log n) layout reads on a heavily annotated
+         chapter. One measurement per item is enough. */
+      e.__hhRect = r;
       out.push(e);
     }
     out.sort(function (a, b) {
-      var ar = rc(a), br = rc(b);
+      var ar = a.__hhRect, br = b.__hhRect;
       return Math.abs(ar.top - br.top) > 8 ? ar.top - br.top : ar.left - br.left;
     });
     return out;
@@ -967,8 +976,16 @@
     for (var i = 0; i < selectors.length; i++) {
       var list = $$(selectors[i]);
       for (var j = 0; j < list.length; j++) {
-        var e = list[j], r = rc(e);
-        if (!e.isConnected || !shown(e) || r.width < 8 || r.height < 8) continue;
+        var e = list[j];
+        if (!e.isConnected) continue;
+        /* One measurement feeds both the size test and the visibility check.
+           shown() would read the rect a second time for every candidate, but
+           its 18x14 minimum has to be kept: shown() applied it on top of the
+           8x8 test below, and dropping it let a tiny button through. */
+        var r = rc(e);
+        if (r.width < 18 || r.height < 14) continue;
+        if (r.width < 8 || r.height < 8) continue;
+        if (!shownSized(e, r)) continue;
         if (!panel.contains(e) && !e.closest('[class*="float_panel"]')) continue;
         return e;
       }
