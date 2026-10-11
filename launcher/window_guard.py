@@ -5,6 +5,9 @@ import subprocess
 import sys
 
 
+MODES = ("startup", "fullscreen", "focus", "focus-fullscreen")
+
+
 def reader_windows(tree):
     found = []
     if (tree.get("app_id") or "").startswith("chrome-weread.qq.com__"):
@@ -20,12 +23,22 @@ def repair_commands(window, mode):
         return [selector + " border none, fullscreen enable, focus"]
     if mode == "focus" and not window.get("focused"):
         return [selector + " focus"]
+    if mode == "focus-fullscreen":
+        # Exactly the repairs that `focus` then `fullscreen` performed, but
+        # decided from a single parsed tree. Whenever fullscreen has to be
+        # (re)applied we keep the original combined command that also
+        # re-asserts focus, because sway may drop focus while going fullscreen.
+        if window.get("fullscreen_mode", 0) == 0:
+            return [selector + " border none, fullscreen enable, focus"]
+        if not window.get("focused"):
+            return [selector + " focus"]
+        return []
     return []
 
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "fullscreen"
-    if mode not in ("startup", "fullscreen", "focus"):
+    if mode not in MODES:
         return 2
     try:
         tree = json.loads(subprocess.check_output(

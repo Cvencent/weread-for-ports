@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """Send a small allowlist of reader actions as actual local browser input."""
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 import sys
 
-sys.path.insert(0, "/storage/roms/ports/browser")
+# cdp.py ships next to this file and is also copied into the browser directory
+# that the launcher uses; accept either location so a partial update still works.
+for _candidate in ("/storage/roms/ports/browser", os.path.dirname(os.path.abspath(__file__))):
+    if os.path.isfile(os.path.join(_candidate, "cdp.py")):
+        sys.path.insert(0, _candidate)
+        break
 import cdp
 
 
@@ -100,8 +106,14 @@ def click_action(action):
                     raise ValueError("Browser rejected keyboard input")
         return {"ok": True}
     finally:
+        # Cleanup must never raise: a failure here would mask the real error and
+        # leave .readerControls stuck in its pointer-events-enabled state, which
+        # would make the invisible toolbar swallow the next tap.
         if action in ("catalog", "settings"):
-            ws.call(5, "Runtime.evaluate", {"expression": "document.querySelector('.readerControls')?.removeAttribute('data-wr-hh-native-input')"})
+            try:
+                ws.call(5, "Runtime.evaluate", {"expression": "document.querySelector('.readerControls')?.removeAttribute('data-wr-hh-native-input')"})
+            except (OSError, ValueError, KeyError, RuntimeError):
+                pass
         ws.close()
 
 
@@ -132,5 +144,12 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
 
+class Server(ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+
 if __name__ == "__main__":
-    HTTPServer(("127.0.0.1", 9223), Handler).serve_forever()
+    # Threaded: a slow CDP round trip (slow network, busy renderer) must not
+    # block the extension's retry, which uses a 4 s budget of its own.
+    Server(("127.0.0.1", 9223), Handler).serve_forever()

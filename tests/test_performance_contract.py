@@ -33,7 +33,9 @@ class PerformanceContractTests(unittest.TestCase):
         self.assertNotIn("fullguard()", script)
         self.assertIn("sleep 5", script)
         self.assertIn('python3 "$WINDOW_GUARD" focus', script)
-        self.assertIn('python3 "$WINDOW_GUARD" fullscreen', script)
+        # Focus and fullscreen share one Python start so the sway tree is
+        # parsed once per tick instead of twice.
+        self.assertIn('python3 "$WINDOW_GUARD" focus-fullscreen', script)
 
     def test_shell_avoids_route_entry_animation(self):
         css = (ROOT / "extension/shell.css").read_text(encoding="utf-8")
@@ -83,6 +85,16 @@ class PerformanceContractTests(unittest.TestCase):
         self.assertIn("max-age=86400", response_headers[0]["value"])
         self.assertNotIn("main_frame", font_rules[0]["condition"]["resourceTypes"])
         self.assertNotIn("stylesheet", font_rules[0]["condition"]["resourceTypes"])
+
+    def test_offscreen_placeholders_match_the_real_card_boxes(self):
+        # A wrong contain-intrinsic-size makes the scrollbar jump as cards
+        # enter and leave the viewport, so each type gets its rendered size.
+        css = (ROOT / "extension/shell.css").read_text(encoding="utf-8")
+        self.assertIn("contain-intrinsic-size: 143px 174px;", css)
+        self.assertIn("contain-intrinsic-size: 298px 154px;", css)
+        self.assertIn("contain-intrinsic-size: 298px 136px;", css)
+        self.assertIn("contain-intrinsic-size: 144px 48px;", css)
+        self.assertNotIn("contain-intrinsic-size: 160px 200px;", css)
 
 if __name__ == "__main__":
     unittest.main()

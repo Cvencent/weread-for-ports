@@ -134,14 +134,17 @@
   function hasNav() { return !!document.getElementById(NAV); }
   function menuEl() { return document.getElementById(MENU); }
 
-  function shown(e) {
-    if (!e || !e.isConnected) return false;
-    var r = rc(e);
-    if (r.width < 18 || r.height < 14) return false;
+  function shownSized(e, r) {
     var cs = getComputedStyle(e);
     if (cs.display === 'none' || cs.visibility === 'hidden') return false;
     if (parseFloat(cs.opacity || '1') < 0.04) return false;
     return true;
+  }
+  function shown(e) {
+    if (!e || !e.isConnected) return false;
+    var r = rc(e);
+    if (r.width < 18 || r.height < 14) return false;
+    return shownSized(e, r);
   }
 
   /* Cache vector data because the discovery page omits the site's sprite. */
@@ -250,8 +253,12 @@
       if (activePanel && e.classList.contains('font-panel-content-fonts-tab')) continue;
       if (mine(e) && !e.matches('#' + NAV + ' .wr-hh-tab')) continue;
       if (isTextish(e)) continue;          /* ⭐ v6：排除搜索框等文本输入 */
-      if (!shown(e)) continue;
+      /* One layout read per candidate: shown() reuses the same rect for the
+         size test below instead of forcing a second reflow. */
+      if (!e.isConnected) continue;
       var r = rc(e);
+      if (r.width < 18 || r.height < 14) continue;
+      if (!shownSized(e, r)) continue;
       /* 排除"盖住大半屏"的容器（放宽到 0.60，避免误杀大卡片） */
       if (r.width * r.height > innerWidth * innerHeight * 0.60) continue;
       if (e.classList.contains('font-panel-content-fonts-item') &&
@@ -272,14 +279,18 @@
       if (keep) out.push(el);
     }
 
-    /* 网格坐标：先算坐标，再排序；导航条行号为 -1（永远置顶） */
+    /* 网格坐标：先算坐标，再排序；导航条行号为 -1（永远置顶）
+       Tabs are tracked in a Set: on a long shelf both this merge and the
+       coordinate pass used to be linear scans per element. */
     var tabs = activePanel ? [] : $$('#' + NAV + ' button');
+    var inOut = new Set(out);
+    var tabSet = new Set(tabs);
     for (var k = 0; k < tabs.length; k++) {
-      if (shown(tabs[k]) && out.indexOf(tabs[k]) < 0) out.push(tabs[k]);
+      if (shown(tabs[k]) && !inOut.has(tabs[k])) { out.push(tabs[k]); inOut.add(tabs[k]); }
     }
     for (var m = 0; m < out.length; m++) {
       var rr = rc(out[m]);
-      var isTab = tabs.indexOf(out[m]) >= 0;
+      var isTab = tabSet.has(out[m]);
       out[m].__gy = isTab ? Math.round(rr.top / ROWH) - 10 : rowOf(rr);
       out[m].__gx = rr.left + rr.width / 2;
     }
@@ -530,12 +541,14 @@
     var ct = absTop(c), cb = ct + cr.height;
     var cl = absLeft(c), ccol = cl + cr.width / 2;
     var best = -1, bs = Infinity, i, r;
+    /* One rect read per candidate per keypress: absTop/absLeft each call
+       rc() again, so derive every coordinate from a single measurement. */
 
     if (dir === 'down' || dir === 'up') {
       for (i = 0; i < t.length; i++) {
         if (t[i] === c) continue;
         r = rc(t[i]); if (r.width < 1) continue;
-        var top = absTop(t[i]), col = absLeft(t[i]) + r.width / 2;
+        var top = r.top + window.scrollY, col = r.left + window.scrollX + r.width / 2;
         var d = (dir === 'down') ? (top - ct) : (ct - top);
         if (d <= 2) continue;                       /* 必须真的在下方/上方 */
         var sc = d * 1000 + Math.abs(col - ccol);   /* 主序=垂直距离，次序=横向偏差 */
@@ -543,27 +556,28 @@
       }
     } else {
       /* ←→：先只在「与本元素纵向重叠 ≥40%」的同行元素里找 */
-      var band = [];
+      var bandBest = Infinity;
       for (i = 0; i < t.length; i++) {
         if (t[i] === c) continue;
         r = rc(t[i]); if (r.width < 1) continue;
-        var top2 = absTop(t[i]), bot2 = top2 + r.height;
+        var top2 = r.top + window.scrollY, bot2 = top2 + r.height;
         var ov = Math.min(bot2, cb) - Math.max(top2, ct);
         if (ov < Math.min(r.height, cr.height) * 0.4) continue;
-        var left2 = absLeft(t[i]), col2 = left2 + r.width / 2;
+        var col2 = r.left + window.scrollX + r.width / 2;
         if (dir === 'right' && col2 <= ccol + 2) continue;
         if (dir === 'left'  && col2 >= ccol - 2) continue;
-        band.push({ i: i, d: Math.abs(col2 - ccol) });
+        var dist = Math.abs(col2 - ccol);
+        if (dist < bandBest) { bandBest = dist; best = i; }
       }
-      if (band.length) {
-        band.sort(function (a, b) { return a.d - b.d; });
-        best = band[0].i;
+      if (bandBest < Infinity) {
+        /* The nearest same-row candidate was found; keep it. */
       } else {
         /* 行内到头 → 跨到相邻行的最左/最右（按行中心就近） */
+        best = -1;
         for (i = 0; i < t.length; i++) {
           if (t[i] === c) continue;
           r = rc(t[i]); if (r.width < 1) continue;
-          var top3 = absTop(t[i]), col3 = absLeft(t[i]) + r.width / 2;
+          var top3 = r.top + window.scrollY, col3 = r.left + window.scrollX + r.width / 2;
           var dy = top3 - ct;
           if (dir === 'right' && dy <= 2) continue;
           if (dir === 'left'  && dy >= -2) continue;
@@ -1119,6 +1133,12 @@
   function watchReaderBusy(action, context) {
     var state = readerBusyState;
     if (!state || state.context !== context) return;
+    /* Font activation compares computed styles across every font row, so it
+       cannot be polled at the same cadence as the cheap DOM checks. A font
+       swap takes a few hundred ms to settle; polling it every 50 ms only
+       bought extra style recalcs, not a faster overlay. */
+    var expensive = action === 'activate' && context && context.kind === 'font';
+    var interval = expensive ? 160 : 50;
     function poll() {
       if (!readerBusyState || readerBusyState !== state) return;
       var elapsed = Date.now() - state.started;
@@ -1134,9 +1154,9 @@
         finishReaderBusy(false);
         return;
       }
-      state.timer = setTimeout(poll, 50);
+      state.timer = setTimeout(poll, interval);
     }
-    state.timer = setTimeout(poll, 30);
+    state.timer = setTimeout(poll, expensive ? 160 : 30);
   }
   var readerInputPending = false;
   function readerInput(action) {
@@ -1252,9 +1272,15 @@
     for (var i = 0; i < sels.length; i++) {
       var l = $$(sels[i]);
       for (var j = 0; j < l.length; j++) {
-        var r = rc(l[j]);
-        if (shown(l[j]) && r.width > 60 && r.height > 60 &&
-            r.left < innerWidth - 20 && r.right > 20 && !mine(l[j])) return l[j];
+        var el = l[j];
+        /* Mine first so the hot sweep never forces a layout read for our own
+           dialogs; shown() then reuses the same rect instead of reading twice. */
+        if (!el.isConnected || mine(el)) continue;
+        var r = rc(el);
+        if (r.width < 60 || r.height < 60) continue;
+        if (r.left >= innerWidth - 20 || r.right <= 20) continue;
+        if (!shownSized(el, r)) continue;
+        return el;
       }
     }
     return null;

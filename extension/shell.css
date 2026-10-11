@@ -3,11 +3,14 @@ html:not(.wr-hh-boot-ready) body > *:not(#wr-hh-boot-mask) { visibility: hidden 
 #wr-hh-boot-mask { position: fixed; inset: 0; z-index: 2147483647; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; background: #f2f4f7; color: #596270; font: 16px "Noto Sans SC", sans-serif; }
 html.wr-hh-boot-ready #wr-hh-boot-mask { display: none; }
 /* Keep offscreen discovery/shelf work out of the paint and layout budget. Never apply to reader canvas containers. */
+/* The placeholder size must match the real card box, otherwise the scrollbar
+   jumps as cards enter and leave the viewport. These are the sizes the
+   handheld layout actually renders (640px wide, four columns). */
 body.wr-hh-perf .shelfBook,
-body.wr-hh-perf .shelfArchive,
-body.wr-hh-perf .wr_suggestion_card_wrapper,
-body.wr-hh-perf .wr_bookList_item,
-body.wr-hh-perf #wr-hh-categories a { content-visibility: auto; contain-intrinsic-size: 160px 200px; }
+body.wr-hh-perf .shelfArchive { content-visibility: auto; contain-intrinsic-size: 143px 174px; }
+body.wr-hh-perf .wr_suggestion_card_wrapper { content-visibility: auto; contain-intrinsic-size: 298px 154px; }
+body.wr-hh-perf .wr_bookList_item { content-visibility: auto; contain-intrinsic-size: 298px 136px; }
+body.wr-hh-perf #wr-hh-categories a { content-visibility: auto; contain-intrinsic-size: 144px 48px; }
 body.wr-hh-perf .shelfBook img,
 body.wr-hh-perf .shelfArchive img,
 body.wr-hh-perf .wr_suggestion_card_wrapper img,

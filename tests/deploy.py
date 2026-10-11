@@ -15,6 +15,7 @@ FILES = {
     "launcher/node.sh": "/storage/roms/ports/weread/node.sh",
     "launcher/window_guard.py": "/storage/roms/ports/weread/window_guard.py",
     "launcher/input_bridge.py": "/storage/roms/ports/weread/input_bridge.py",
+    "launcher/cdp.py": "/storage/roms/ports/browser/cdp.py",
     "launcher/weread.gptk": "/storage/roms/ports/browser/weread.gptk",
     "launcher/操作说明.txt": "/storage/roms/ports/browser/操作说明.txt",
     "ports/media/Weread.png": "/storage/roms/ports/media/Weread.png",

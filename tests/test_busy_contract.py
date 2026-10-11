@@ -54,3 +54,17 @@ class ReaderBusyContractTests(unittest.TestCase):
         self.assertIn("beginReaderBusy('close')", close_block)
         self.assertIn("watchReaderBusy('close'", close_block)
         self.assertIn("beginReaderBusy('annotation')", annotation_block)
+
+    def test_font_activation_is_not_polled_at_the_cheap_cadence(self):
+        # readerBusyComplete() reads computed styles across every font row,
+        # so the font path polls on a slower cadence than the DOM-only checks.
+        self.assertIn("var expensive = action === 'activate'", self.js)
+        self.assertIn("var interval = expensive ? 160 : 50;", self.js)
+        self.assertIn("setTimeout(poll, expensive ? 160 : 30)", self.js)
+        # The overlay itself must still appear immediately.
+        begin = self.js.split("function beginReaderBusy", 1)[1].split("function readerBusyComplete", 1)[0]
+        self.assertIn("paintReaderBusy(action, context);", begin)
+
+
+if __name__ == '__main__':
+    unittest.main()

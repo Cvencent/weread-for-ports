@@ -51,7 +51,7 @@ Ports/EmulationStation 平台，不绑定 X35S，后续可继续适配其他掌�
 
 ```text
 extension/             Chromium MV3 扩展与当前样式
-launcher/              掌机启动器、窗口守卫、输入桥和 gptokeyb 映射
+launcher/              掌机启动器、窗口守卫、输入桥、CDP 客户端和 gptokeyb 映射
 ports/                 Ports 安装/卸载脚本、gamelist 元数据与封面
 docs/                  架构、背景和历史验证记录
 tests/                 菜单 XML 单元测试及真机验收脚本

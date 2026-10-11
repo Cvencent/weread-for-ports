@@ -34,6 +34,7 @@ PIDFILE=/tmp/weread.pid
 DEBUG_PORT=9222
 WINDOW_GUARD=/storage/roms/ports/weread/window_guard.py
 INPUT_BRIDGE=/storage/roms/ports/weread/input_bridge.py
+CDP_TOOL=/storage/roms/ports/browser/cdp.py
 
 # ---------------- 单实例锁 ----------------
 acquire_lock() {
@@ -63,6 +64,7 @@ selfcheck() {
   [ -f "$DEST/weread.gptk" ]     || { echo "❌ 手柄映射缺失"; bad=1; }
   [ -f "$WINDOW_GUARD" ]        || { echo "[weread] window guard missing"; bad=1; }
   [ -f "$INPUT_BRIDGE" ]         || { echo "[weread] input bridge missing"; bad=1; }
+  [ -f "$CDP_TOOL" ]              || { echo "[weread] cdp client missing"; bad=1; }
   [ -f "$EXT/background-v8.1.js" ] || { echo "[weread] extension worker missing"; bad=1; }
   [ -f "$EXT/telemetry-rules.json" ] || { echo "[weread] extension rules missing"; bad=1; }
   [ -d "$PROFILE" ]              || mkdir -p "$PROFILE"
@@ -225,8 +227,12 @@ shell_guard() {
     pgrep -f "chrome --" >/dev/null 2>&1 || break
     tick=$((tick + 1))
     [ -n "$SWAYSOCK" ] || continue
-    python3 "$WINDOW_GUARD" focus
-    [ $((tick % 2)) -eq 0 ] && python3 "$WINDOW_GUARD" fullscreen
+    if [ $((tick % 2)) -eq 0 ]; then
+      # One Python start per tick: parse the sway tree once for focus+fullscreen.
+      python3 "$WINDOW_GUARD" focus-fullscreen
+    else
+      python3 "$WINDOW_GUARD" focus
+    fi
     if [ $((tick % 4)) -eq 0 ] && [ -z "$health_pid" ]; then
       (
         bad=$(python3 - <<'PY'
@@ -247,7 +253,7 @@ PY
 )
         if [ -n "$bad" ]; then
           echo "[weread] shell guard: 检出异常页面，拉回首页"
-          python3 "$DEST/cdp.py" --url "https://weread.qq.com/" "location.href" >/dev/null 2>&1
+          python3 "$CDP_TOOL" --url "https://weread.qq.com/" "location.href" >/dev/null 2>&1
         fi
       ) &
       health_pid=$!
