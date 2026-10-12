@@ -54,7 +54,8 @@ extension/             Chromium MV3 扩展与当前样式
 launcher/              掌机启动器、窗口守卫、输入桥、CDP 客户端和 gptokeyb 映射
 ports/                 Ports 安装/卸载脚本、gamelist 元数据与封面
 docs/                  架构、背景和历史验证记录
-tests/                 菜单 XML 单元测试及真机验收脚本
+tests/                 单元/契约测试、Node 与浏览器测试夹具及真机验收脚本
+tools/                 ESLint 配置（测试套件会运行它）
 screenshots/           脱敏后的真机界面截图
 ```
 
@@ -139,7 +140,8 @@ bash ports/uninstall.sh
 仓库提供两个可复用文件：
 
 - `ports/update_gamelist.py`：使用标准库 `xml.etree`，按路径查找并更新条目，
-  使用临时文件原子替换，不覆盖其他游戏。
+  使用临时文件原子替换，不覆盖其他游戏。解析时保留 XML 注释，因此重新安装
+  不会删除你在 `gamelist.xml` 里手写的分组和说明。
 - `ports/gamelist.fragment.xml`：包含名称、描述、封面和分类的 `Weread` 条目模板。
 
 也可以单独运行：
@@ -157,10 +159,18 @@ python3 ports/update_gamelist.py /storage/roms/ports/gamelist.xml --remove
 
 ## 开发与验证
 
-菜单条目的单元测试：
+完整测试套件（静态契约、真实 Chromium 行为、真实 bash 函数、真实 HTTP 端点）：
 
 ```sh
-python tests/test_gamelist.py -v
+python -m unittest discover -s tests -p 'test_*.py'
+```
+
+静态检查：
+
+```sh
+python -m pyflakes launcher/*.py ports/*.py tests/*.py
+npx --yes eslint --config tools/eslint.config.mjs extension/content.js extension/background-v8.1.js
+bash -n launcher/node.sh ports/install.sh ports/uninstall.sh ports/Weread.sh
 ```
 
 真机验收脚本需要 Python、`paramiko` 和可 SSH 连接的掌机。连接信息只通过环境变量提供：
