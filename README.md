@@ -1,6 +1,6 @@
 # WeRead for Ports / 微信读书 Ports 平台适配方案
 
-> 当前发布：**v10**（2026-10-12），发布说明见 [`docs/release-v10.md`](docs/release-v10.md)。
+> 当前发布：**v11**（2026-10-12），发布说明见 [`docs/release-v11.md`](docs/release-v11.md)。
 
 
 把微信读书网页版封装成适合 **Ports 掌机**使用的无触屏阅读客户端。项目当前已在
