@@ -63,12 +63,37 @@ screenshots/           脱敏后的真机界面截图
 
 ## 安装到 Ports 掌机
 
-微信读书是一个标准 **PortMaster port**：发布的是一个 `weread.zip`，在 PortMaster
-界面里点一下就装好，**不需要 SSH、不需要在掌机上敲任何命令**。
+一句话：**下载 `weread.zip`，在 PortMaster 里装一下**。不需要 SSH，不需要在掌机上敲
+任何命令。
 
-### 1. 前置：Chromium
+### 1. 下载 `weread.zip`
 
-微信读书复用 Browser port 的 Chromium（约 500MB），仓库不包含它。安装前确认设备上
+从 GitHub Releases 下载（最新 v12）：
+
+```text
+https://github.com/Cvencent/weread-for-ports/releases/download/v12/weread.zip
+```
+
+约 98KB。同目录下还有 `weread.zip.sha256`，可选校验：
+
+```sh
+sha256sum weread.zip          # 对比 weread.zip.sha256 里的值
+```
+
+### 2. 用 PortMaster 安装（三条路径，任选其一）
+
+| 路径 | 怎么做 | 适合谁 |
+| --- | --- | --- |
+| **界面里从文件安装** | 把 `weread.zip` 放到掌机能读到的位置（U 盘 / 共享 / 下载目录），在 PortMaster 里选这个 zip 安装 | 绝大多数用户 |
+| **autoinstall 自动安装** | 把 `weread.zip` 放进 `/storage/roms/ports/PortMaster/autoinstall/`，下次启动 PortMaster 会弹出「Auto-installation」确认框，点 Install | 批量部署、换机 |
+| **官方目录一键装** | `weread.zip` 挂在 GitHub Release 并登记进 PortMaster 官方端口目录，用户在 PortMaster 列表里搜「微信读书」直接装 | 商店式体验 |
+
+三条路径安装的是同一个 `weread.zip`；PortMaster 只是把它解压到 ports 目录，
+之后由 EmulationStation 直接运行解压出来的 `Weread.sh`。
+
+### 3. 前置条件：Chromium
+
+微信读书复用 Browser port 的 Chromium（约 500MB），**本仓库不包含它**。装之前确认设备上
 存在：
 
 ```text
@@ -83,18 +108,9 @@ screenshots/           脱敏后的真机界面截图
 export WEREAD_BROWSER_DIR=/storage/roms/ports/browser
 ```
 
-### 2. 用 PortMaster 安装（三条路径，任选其一）
+没有 Chromium 就先在 PortMaster 里装 Browser port。
 
-| 路径 | 怎么做 | 适合谁 |
-| --- | --- | --- |
-| **autoinstall 自动安装** | 把 `weread.zip` 放进 `/storage/roms/ports/PortMaster/autoinstall/`，下次启动 PortMaster 会弹出「Auto-installation」确认框，点 Install | 批量部署、换机 |
-| **界面里从文件安装** | 把 `weread.zip` 放到掌机能读到的位置（U 盘 / 共享 / 下载目录），在 PortMaster 里选这个 zip 安装 | 绝大多数用户 |
-| **官方目录一键装** | `weread.zip` 挂在 GitHub Release 并登记进 PortMaster 官方端口目录，用户在 PortMaster 列表里搜「微信读书」直接装 | 商店式体验 |
-
-三条路径安装的是同一个 `weread.zip`；PortMaster 只是把它解压到 ports 目录，
-之后由 EmulationStation 直接运行解压出来的 `Weread.sh`。
-
-### 3. 安装后的目录
+### 4. 安装后的样子
 
 PortMaster 把 zip 解成「一个自包含目录 + 一个顶层启动器」，和 Browser、Celeste 等
 port 完全一致：
@@ -110,31 +126,36 @@ port 完全一致：
          telemetry-rules.json
 ```
 
-首次启动时 `node.sh` 会自动补齐两件事，都幂等、都不碰登录资料：
+**首次启动时 `node.sh` 会自动补齐两件事**，都幂等、都不碰登录资料：
 
 1. 把封面发布到共享的 `/storage/roms/ports/media/Weread.png`；
 2. 用 `update_gamelist.py` 把中文条目写进 `gamelist.xml`。
 
-之后列表中应显示：
+所以装完不用手动配置，列表里就会出现：
 
 - 名称：`微信读书`
 - 描述：支持手柄导航、书架与发现、阅读翻页、目录、搜索和字号设置
 - 分类：`阅读工具`
 - 封面：`./media/Weread.png`
 
-因为所有自有文件都在 `weread/` 一个目录里，**更新就是把整个 `weread/` 目录换掉**，
-登录态在 `/storage/.config/weread-profile`，不受影响。
+### 5. 更新
 
-### 4. 自己打包
+因为所有自有文件都在 `weread/` 一个目录里，**更新就是把整个 `weread/` 目录换掉**
+（外加顶层 `Weread.sh`）。登录态在 `/storage/.config/weread-profile`，不受影响。
+
+在 PortMaster 里对该条目重新安装新版本的 zip 即可。
+
+### 6. 卸载
+
+在 PortMaster 里对该条目 Uninstall，或从 SSH 执行：
 
 ```sh
-python tests/package_portmaster.py     # → output/weread.zip，并按 PortMaster 规则自检
+bash ports/uninstall.sh
 ```
 
-打包脚本会复刻 PortMaster `check_port()` 的硬性校验（扁平结构、至少一个顶层目录 +
-一个顶层 `.sh`、禁止路径穿越、`port.json` 为 v2），不通过就直接失败。
+两者都只删除 `weread/` 目录、`Weread.sh` 和封面，保留登录资料和 Chromium。
 
-### 5. 备选：SSH 安装脚本
+### 7. 备选：SSH 安装脚本
 
 没有 PortMaster、或需要批量部署时，仍可在仓库根目录执行：
 
@@ -154,15 +175,17 @@ systemctl is-active essway.service
 
 不要在由 `node.sh` 启动的进程内部停止 `essway.service`；它是启动器的父服务。
 
-### 6. 卸载
+### 附：自己打包（开发者）
 
-在 PortMaster 里对该条目 Uninstall，或：
+改完代码想自己出包：
 
 ```sh
-bash ports/uninstall.sh
+python tests/package_portmaster.py     # → output/weread.zip，并按 PortMaster 规则自检
 ```
 
-两者都只删除 `weread/` 目录、`Weread.sh` 和封面，保留登录资料和 Chromium。
+打包脚本会复刻 PortMaster `check_port()` 的硬性校验（扁平结构、至少一个顶层目录 +
+一个顶层 `.sh`、禁止路径穿越、`port.json` 为 v2），不通过就直接失败——不会产出一个
+装不上的包。
 
 ## 按键
 
