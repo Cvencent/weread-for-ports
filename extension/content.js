@@ -210,6 +210,20 @@
   }
   function invalidateNow() { cacheOk = false; }
 
+  /* Debounced shell refresh, shared by the DOM observer and by in-page
+     navigation. It used to be a nested function inside boot(), so the call
+     from sameDocumentNavigate() threw a ReferenceError that the surrounding
+     try/catch swallowed: after an in-page navigation the shell never ran
+     settleLoading() or syncRetry(), so the loading overlay and the focus
+     anchor could stay stale until the next full page load. */
+  var refreshTimer = null;
+  function scheduleRefresh() {
+    if (refreshTimer) return;
+    refreshTimer = setTimeout(function () {
+      refreshTimer = null; syncNav(); settleLoading(); syncRetry();
+    }, 100);
+  }
+
   /* 诊断（写入隐藏 DOM 节点，供远程读取；扩展在隔离世界，window 读不到） */
   function diag(o) {
     try {
@@ -341,10 +355,14 @@
       return;
     }
     var top = hasNav() ? rc(document.getElementById(NAV)).bottom : 0;
+    /* `var r` already names the sticky-header rect above, so reuse it rather
+       than redeclaring it: a second `var r` in the same function scope means
+       both bindings are the same variable, which only works because the first
+       one is inside an if-block that has already returned. */
     for (var i = 0; i < 4; i++) {
-      var r = rc(el);
-      if (r.top < top + 6) window.scrollBy(0, r.top - top - 12);
-      else if (r.bottom > innerHeight - 6) window.scrollBy(0, r.bottom - innerHeight + 12);
+      var box = rc(el);
+      if (box.top < top + 6) window.scrollBy(0, box.top - top - 12);
+      else if (box.bottom > innerHeight - 6) window.scrollBy(0, box.bottom - innerHeight + 12);
       else break;
     }
   }
@@ -436,11 +454,15 @@
 
   function focusFirst() {
     if (isReader() && !openPanel()) { syncRetry(); return; }
+    /* The origin we came from wins over the plain focus key when arriving from
+       a discovery page. These used to be two `var remembered` declarations in
+       this one function scope, so the second hoisted over the first and the
+       lookup only came out right by accident of ordering. */
+    var remembered = null;
     if (pendingOriginKey && (location.pathname === '/' || /^\/web\/category\//.test(location.pathname))) {
-      var remembered = findByKey(pendingOriginKey);
-      if (remembered) { focusAtEl(remembered); return; }
+      remembered = findByKey(pendingOriginKey);
     }
-    var remembered = findByKey(focusKey);
+    if (!remembered) remembered = findByKey(focusKey);
     if (remembered) { focusAtEl(remembered); return; }
     if (!focusEl || !focusEl.isConnected) {
       var primaryTab = $("#" + NAV + " .wr-hh-tab.on");
@@ -1795,7 +1817,12 @@
         delete active[index]; return list;
       }
       var out = {}; memo[index] = out;
-      for (var key in item) out[key] = value(item[key]);
+      /* hasOwnProperty guards keep an inherited or prototype key from being
+         copied into the rebuilt object, and keep Object.prototype itself from
+         contributing a "toString" entry to the decoded payload. */
+      for (var key in item) {
+        if (Object.prototype.hasOwnProperty.call(item, key)) out[key] = value(item[key]);
+      }
       delete active[index]; return out;
     }
     return { value: value, flat: flat };
@@ -1805,6 +1832,7 @@
     var books = [];
     if (entries) {
       for (var key in entries) {
+        if (!Object.prototype.hasOwnProperty.call(entries, key)) continue;
         var entry = entries[key];
         if (entry && Array.isArray(entry.books) && entry.books.length) { books = entry.books.slice(); break; }
       }
@@ -2238,13 +2266,6 @@
     } catch (e) { invalidateNow(); }
 
     var last = location.pathname + location.search;
-    var refreshTimer = null;
-    function scheduleRefresh() {
-      if (refreshTimer) return;
-      refreshTimer = setTimeout(function () {
-        refreshTimer = null; syncNav(); settleLoading(); syncRetry();
-      }, 100);
-    }
     try {
       var pending = readPendingLoading();
       if (pending) { loadingState = pending; paintLoading(); setBootMaskText(pending.text); }

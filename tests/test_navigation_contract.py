@@ -37,8 +37,16 @@ class NavigationContractTests(unittest.TestCase):
         self.assertIn("wr-hh-tab.on", js)
     def test_same_document_navigation_restores_the_clicked_route_control(self):
         js = (ROOT / "extension/content.js").read_text(encoding="utf-8")
-        self.assertIn("var remembered = findByKey(focusKey);", js)
-        self.assertIn("if (remembered) { focusAtEl(remembered); return; }", js)
+        # focusFirst() still looks the key up and focuses it, but through one
+        # `remembered` binding rather than two redeclared ones.
+        block = js.split("function focusFirst() {", 1)[1].split("\n  }", 1)[0]
+        self.assertIn("findByKey(focusKey)", block)
+        self.assertIn("if (remembered) { focusAtEl(remembered); return; }", block)
+        declarations = [line for line in block.splitlines()
+                        if line.strip().startswith("var remembered")]
+        self.assertEqual(len(declarations), 1,
+                         "focusFirst redeclares `remembered`, which hoists and "
+                         "makes the first lookup depend on declaration order")
 
     def test_rank_list_text_and_rating_badge_have_readable_shell_styles(self):
         css = (ROOT / "extension/shell.css").read_text(encoding="utf-8")
