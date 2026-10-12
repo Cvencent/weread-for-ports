@@ -45,7 +45,6 @@ class NestedScopeTests(unittest.TestCase):
         nested = set(re.findall(r"^\s{4}function (\w+)\(", boot, re.M))
         self.assertTrue(nested, "boot() should still own something local")
 
-        callers = re.findall(r"\b(\w+)\(\)", self.source)
         for name in sorted(nested):
             # Only a problem if something outside boot() calls it.
             outside = self.source.count(name + "(") - boot.count(name + "(")

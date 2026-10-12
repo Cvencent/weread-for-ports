@@ -8,7 +8,6 @@ the "A sometimes works, sometimes does not" symptom the lock exists to prevent.
 The functions are lifted verbatim out of node.sh and run under bash, so the
 test exercises the shipped logic rather than a paraphrase of it.
 """
-import os
 import pathlib
 import shutil
 import subprocess
