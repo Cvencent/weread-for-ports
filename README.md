@@ -1,6 +1,6 @@
 # WeRead for Ports / 微信读书 Ports 平台适配方案
 
-> 当前发布：**v1.1**（2026-10-12），发布说明见 [`docs/release-v1.1.md`](docs/release-v1.1.md)。
+> 当前发布：**v1.2**（2026-10-12），发布说明见 [`docs/release-v1.2.md`](docs/release-v1.2.md)。
 
 
 把微信读书网页版封装成适合 **Ports 掌机**使用的无触屏阅读客户端。项目当前已在
@@ -44,6 +44,7 @@ Ports/EmulationStation 平台，不绑定 X35S，后续可继续适配其他掌�
 | 目标平台 | Ports / EmulationStation |
 | 安装方式 | PortMaster 一键安装（`weread.zip`），`install.sh` 作为备选 |
 | 已验证设备 | Powkiddy X35S，640x480，纯手柄（RK3566 / Mali-G52） |
+| 渲染后端 | Mali-G52 硬件渲染（ANGLE / Vulkan），已真机验证 |
 | 其他 Ports 掌机 | 架构上可复用，尚未逐台验证；R36S 的差异见下方说明 |
 | Chromium | 需要单独安装，仓库不包含约 500MB 的浏览器运行文件 |
 | 扩展样式 | 当前只加载 `extension/shell.css` |
@@ -68,10 +69,10 @@ screenshots/           脱敏后的真机界面截图
 
 ### 1. 下载 `weread.zip`
 
-从 GitHub Releases 下载（最新 v1.1）：
+从 GitHub Releases 下载（最新 v1.2）：
 
 ```text
-https://github.com/Cvencent/weread-for-ports/releases/download/v1.1/weread.zip
+https://github.com/Cvencent/weread-for-ports/releases/download/v1.2/weread.zip
 ```
 
 约 98KB。同目录下还有 `weread.zip.sha256`，可选校验：
