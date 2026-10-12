@@ -92,6 +92,7 @@ def protocol(client, method, params):
     script = f"""
 import sys,base64,json
 sys.path.insert(0,"/storage/roms/ports/browser")
+sys.path.insert(0,"/storage/roms/ports/weread")
 import cdp
 ws=cdp.WS(cdp.pick_page_target()["webSocketDebuggerUrl"])
 try:

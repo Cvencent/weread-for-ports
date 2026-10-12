@@ -59,10 +59,14 @@ class CdpClientContractTests(unittest.TestCase):
         self.assertIn('[ -f "$CDP_TOOL" ]', self.node)
         self.assertIn('python3 "$CDP_TOOL" --url', self.node)
 
-    def test_deploy_tolerates_a_device_without_the_cdp_client_yet(self):
-        # deploy.py backs up the installed files first. An older install has no
-        # cdp.py on disk, so a missing backup must not abort the deployment.
-        self.assertRegex(self.deploy, r'optional = \{[^}]*"cdp[.]py"')
+    def test_deploy_tolerates_a_device_without_a_previous_copy(self):
+        # deploy.py backs up the installed files first. A file that has no copy
+        # at its current path yet (a fresh install, or a layout change that moves
+        # the file) must not abort the deployment; the sha256 check after the
+        # atomic rename is the real integrity gate.
+        self.assertIn("except RuntimeError:", self.deploy)
+        self.assertNotIn("optional = {", self.deploy)
+        self.assertIn("no previous copy to back up", self.deploy)
 
 
 if __name__ == "__main__":

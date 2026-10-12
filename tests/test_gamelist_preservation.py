@@ -105,12 +105,17 @@ class InstallRoundTripTests(unittest.TestCase):
         self.gamelist = self.ports / "gamelist.xml"
         self.ports.mkdir(parents=True)
         self.gamelist.write_bytes(CURATED)
+        # install.sh requires the borrowed Chromium the Browser port provides;
+        # an executable stub is enough to exercise the rest of the script here.
+        chrome = self.ports / "browser" / "chromium" / "chrome"
+        chrome.parent.mkdir(parents=True)
+        chrome.write_text("#!/bin/sh\n", encoding="utf-8")
+        chrome.chmod(0o755)
         # Git Bash needs POSIX-style paths; the interpreter comes from the
         # tests' own environment, so ask python for a path Bash can use.
         self.mount = Path(self.bash).parent.parent
         self.ports_bash = self._to_posix(self.ports)
         self.python_bash = self._to_posix(Path(self.python))
-        self.ext_bash = self._to_posix(Path(self.temp) / "ext")
         self.browser_bash = self._to_posix(self.ports / "browser")
 
     @staticmethod
@@ -138,11 +143,10 @@ class InstallRoundTripTests(unittest.TestCase):
         command = (
             "set -euo pipefail\n"
             'export PORTS_DIR="%s"\n'
-            'export WEREAD_EXT_DIR="%s"\n'
             'export WEREAD_BROWSER_DIR="%s"\n'
             'cd "%s"\n'
             "bash ports/%s\n"
-        ) % (self.ports_bash, self.ext_bash, self.browser_bash,
+        ) % (self.ports_bash, self.browser_bash,
              self._to_posix(ROOT), script)
         # The shim goes on PATH through the environment rather than an export:
         # a Windows path in a shell PATH assignment gets split on its drive
@@ -162,8 +166,8 @@ class InstallRoundTripTests(unittest.TestCase):
         self.assertEqual(installed.count(b"<!--"), CURATED.count(b"<!--"))
         self.assertIn("微信读书", installed.decode("utf-8"))
         self.assertTrue((self.ports / "Weread.sh").exists())
-        self.assertTrue((Path(self.temp) / "ext" / "content.js").exists())
-        self.assertTrue((self.ports / "browser" / "cdp.py").exists())
+        self.assertTrue((self.ports / "weread" / "ext" / "content.js").exists())
+        self.assertTrue((self.ports / "weread" / "cdp.py").exists())
 
         # Running install twice must not accumulate entries or duplicates.
         self._run("install.sh")
@@ -177,11 +181,10 @@ class InstallRoundTripTests(unittest.TestCase):
         self.assertEqual(remaining.count(b"<!--"), CURATED.count(b"<!--"))
         self.assertNotIn("微信读书", remaining.decode("utf-8"))
         self.assertFalse((self.ports / "Weread.sh").exists())
-        self.assertFalse((Path(self.temp) / "ext").exists())
-        self.assertFalse((self.ports / "browser" / "cdp.py").exists())
+        self.assertFalse((self.ports / "weread").exists())
         # The unrelated game and the browser itself must survive.
         self.assertIn("Zelda", remaining.decode("utf-8"))
-        self.assertTrue((self.ports / "browser").is_dir())
+        self.assertTrue((self.ports / "browser" / "chromium" / "chrome").exists())
 
     def test_install_is_safe_to_rerun_on_a_fresh_device(self):
         # A device with no gamelist at all must still get a valid one.

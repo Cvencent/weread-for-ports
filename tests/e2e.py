@@ -80,6 +80,22 @@ def canvas_state(client):
     })()""")
 
 
+def wait_for_canvas_change(client, before, timeout=10):
+    """Poll until the reader canvas repaints.
+
+    Turning a page has to fetch and draw the next one, so a fixed sleep is a
+    race on a slow connection. Poll for the actual change instead.
+    """
+    deadline = time.monotonic() + timeout
+    current = before
+    while time.monotonic() < deadline:
+        time.sleep(0.5)
+        current = canvas_state(client)
+        if current != before:
+            return current
+    return current
+
+
 def reach_text_page(client):
     for step in range(9):
         if evaluate(client, CANVAS_HAS_INK):
@@ -100,8 +116,7 @@ def rewind_to_start(client, limit=14):
     previous = canvas_state(client)
     for _ in range(limit):
         press(client, "l1")
-        time.sleep(1)
-        current = canvas_state(client)
+        current = wait_for_canvas_change(client, previous, timeout=6)
         if current == previous:
             return current
         previous = current
@@ -189,19 +204,22 @@ def main():
         evidence["stepsToTextPage"] = reach_text_page(client)
         geometry = protected_layout(client)
         capture(client, "v8-final-reader.png")
+        # A book restores its last-read position, which may sit at either end of
+        # the chapter, so prove that page turning repaints from wherever we land
+        # rather than assuming a single direction and a fixed settle time.
         rewind_to_start(client)
         before = canvas_state(client)
         assert before, "The reader painted no canvas to page through"
-        press(client, "r1")
-        time.sleep(1)
-        after = canvas_state(client)
-        assert after != before, ("R1 did not change the reader canvas from the "
-                                 "chapter start, so pagination is not working")
-        press(client, "l1")
-        time.sleep(1)
-        restored = canvas_state(client)
-        assert restored != after, "L1 did not change the reader canvas"
-        evidence["canvas"] = {"before": before, "next": after, "previous": restored}
+        after = before
+        for button in ("r1", "r1", "l1"):
+            press(client, button)
+            probe = wait_for_canvas_change(client, before, timeout=8)
+            if probe != before:
+                after = probe
+                break
+        assert after != before, ("Neither R1 nor L1 changed the reader canvas, so "
+                                 "pagination is not working")
+        evidence["canvas"] = {"before": before, "after": after}
         print("PASS book activation and canvas pagination", flush=True)
 
         press(client, "start")

@@ -25,16 +25,22 @@
 #   4. 启动前等 sway socket 就绪（最多 15s）
 # ============================================================
 
-DEST=/storage/roms/ports/browser
-EXT="/storage/.config/weread-ext"
-PROFILE=/storage/.config/weread-profile
-LOG="$DEST/weread.log"
+# WeRead is one self-contained directory: the launcher, the Python helpers and
+# the unpacked extension all sit next to this script, so an update is a single
+# directory swap. The Chromium binary belongs to the Browser port and the login
+# profile belongs to the user; both are borrowed, never shipped.
+HERE="$(cd "$(dirname "$0")" && pwd)"
+BROWSER_DIR="${WEREAD_BROWSER_DIR:-/storage/roms/ports/browser}"  # Browser port's Chromium
+EXT="$HERE/ext"                      # our unpacked extension
+PROFILE="${WEREAD_PROFILE:-/storage/.config/weread-profile}"
+LOG="$HERE/weread.log"
 LOCKDIR=/tmp/weread.lockdir
 PIDFILE=/tmp/weread.pid
 DEBUG_PORT=9222
-WINDOW_GUARD=/storage/roms/ports/weread/window_guard.py
-INPUT_BRIDGE=/storage/roms/ports/weread/input_bridge.py
-CDP_TOOL=/storage/roms/ports/browser/cdp.py
+WINDOW_GUARD="$HERE/window_guard.py"
+INPUT_BRIDGE="$HERE/input_bridge.py"
+CDP_TOOL="$HERE/cdp.py"
+GPTK="$HERE/weread.gptk"
 
 # ---------------- 单实例锁 ----------------
 acquire_lock() {
@@ -59,9 +65,9 @@ echo $$ > "$PIDFILE"
 # ---------------- 自检 ----------------
 selfcheck() {
   local bad=0
-  [ -x "$DEST/chromium/chrome" ] || { echo "❌ chrome 缺失"; bad=1; }
+  [ -x "$BROWSER_DIR/chromium/chrome" ] || { echo "❌ chrome 缺失"; bad=1; }
   [ -f "$EXT/content.js" ]       || { echo "❌ 扩展缺失"; bad=1; }
-  [ -f "$DEST/weread.gptk" ]     || { echo "❌ 手柄映射缺失"; bad=1; }
+  [ -f "$GPTK" ]                 || { echo "❌ 手柄映射缺失"; bad=1; }
   [ -f "$WINDOW_GUARD" ]        || { echo "[weread] window guard missing"; bad=1; }
   [ -f "$INPUT_BRIDGE" ]         || { echo "[weread] input bridge missing"; bad=1; }
   [ -f "$CDP_TOOL" ]              || { echo "[weread] cdp client missing"; bad=1; }
@@ -95,7 +101,7 @@ GPT="${CF:+$CF/}gptokeyb"
 
 export WAYLAND_DISPLAY=wayland-1
 export XDG_RUNTIME_DIR=/var/run/0-runtime-dir
-export LD_LIBRARY_PATH="$DEST/nss:$DEST/chromium:$LD_LIBRARY_PATH"
+export LD_LIBRARY_PATH="$BROWSER_DIR/nss:$BROWSER_DIR/chromium:$LD_LIBRARY_PATH"
 export MALI_SCHED_RT_THREAD_PRIORITY=95
 
 # sway 控制 socket
@@ -174,7 +180,7 @@ for i in $(seq 1 15); do
 done
 
 # ---------------- 手柄映射器 ----------------
-"$GPT" -k chrome -c "$DEST/weread.gptk" > "$DEST/gptokeyb.log" 2>&1 &
+"$GPT" -k chrome -c "$GPTK" > "$HERE/gptokeyb.log" 2>&1 &
 GPID=$!
 sleep 2
 
@@ -183,7 +189,7 @@ NG=$(ps -ef | grep -c '[g]ptokeyb')
 if [ "$NG" -gt 1 ]; then
   echo "[weread] ⚠️ 检出 $NG 个 gptokeyb，清理后重启"
   kill_hijackers
-  "$GPT" -k chrome -c "$DEST/weread.gptk" > "$DEST/gptokeyb.log" 2>&1 &
+  "$GPT" -k chrome -c "$GPTK" > "$HERE/gptokeyb.log" 2>&1 &
   GPID=$!
   sleep 2
 fi
@@ -191,7 +197,7 @@ fi
 # ---------------- 浏览器 ----------------
 #  ⚠️ 内存：本机仅 976MB RAM（实测 跑一段时间后 available 仅 ~387MB，swap 已用 208MB）
 #     ⇒ 必须限制渲染进程数与 JS 堆，否则页面越用越卡、阅读器加载超时。
-cd "$DEST/chromium" || exit 1
+cd "$BROWSER_DIR/chromium" || exit 1
 ./chrome \
   --test-type \
   --app="https://weread.qq.com/web/shelf" \
@@ -218,7 +224,7 @@ cd "$DEST/chromium" || exit 1
   --user-data-dir="$PROFILE" \
   > "$LOG" 2>&1 &
 CHPID=$!
-python3 "$INPUT_BRIDGE" > "$DEST/input-bridge.log" 2>&1 &
+python3 "$INPUT_BRIDGE" > "$HERE/input-bridge.log" 2>&1 &
 BPID=$!
 
 # ---------------- 等窗口 → 全屏 ----------------

@@ -76,7 +76,6 @@ PortMaster 的 `gptokeyb` 可用。不同系统的目录可能不同，可通过
 
 ```sh
 export WEREAD_BROWSER_DIR=/storage/roms/ports/browser
-export WEREAD_EXT_DIR=/storage/.config/weread-ext
 ```
 
 ### 2. 运行安装脚本
@@ -87,14 +86,30 @@ export WEREAD_EXT_DIR=/storage/.config/weread-ext
 bash ports/install.sh
 ```
 
-脚本会：
+微信读书和仓库里的每个 port 一样，是**一个自包含目录 + 一个启动器**。脚本会把
+微信读书全部文件放进同一个 `/storage/roms/ports/weread/` 目录：
 
-1. 安装 `Weread.sh` 到 `/storage/roms/ports/`。
-2. 安装启动器到 `/storage/roms/ports/weread/`。
-3. 安装扩展到 `/storage/.config/weread-ext/`。
-4. 安装 `Weread.png` 到 `/storage/roms/ports/media/`。
-5. 幂等更新 `/storage/roms/ports/gamelist.xml`，只增加或更新 `./Weread.sh` 条目。
-6. 保留已有 Chromium、`gptokeyb` 和 `/storage/.config/weread-profile` 登录资料。
+```text
+/storage/roms/ports/
+  Weread.sh              ← EmulationStation 自动发现的启动器
+  media/Weread.png       ← 封面
+  weread/                ← 全部微信读书文件（自包含）
+    node.sh  window_guard.py  input_bridge.py  cdp.py  weread.gptk
+    ext/  content.js  shell.css  manifest.json  background-v8.1.js
+         telemetry-rules.json
+```
+
+具体地，脚本会：
+
+1. 检查借用的 Chromium（Browser port 的 `browser/chromium/chrome`）存在，缺失即拒绝安装。
+2. 把启动器、手柄映射、CDP 工具和扩展一次性写入 `/storage/roms/ports/weread/`。
+3. 安装 `Weread.sh` 到 `/storage/roms/ports/`，`Weread.png` 到 `/storage/roms/ports/media/`。
+4. 幂等更新 `/storage/roms/ports/gamelist.xml`，只增加或更新 `./Weread.sh` 条目
+   （设 `WEREAD_GAMELIST=0` 可完全跳过，变成纯投放）。
+5. 保留已有 Chromium、`gptokeyb` 和 `/storage/.config/weread-profile` 登录资料。
+
+因为所有自有文件都在一个目录里，**更新就是把整个 `weread/` 目录换掉**，登录态在
+`~/.config` 之外不受影响；卸载则只删这一个目录和启动器。
 
 重启 EmulationStation/Ports 前端后，列表中的条目应显示：
 

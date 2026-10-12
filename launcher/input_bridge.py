@@ -6,8 +6,9 @@ import os
 import socket
 import sys
 
-# cdp.py ships next to this file and is also copied into the browser directory
-# that the launcher uses; accept either location so a partial update still works.
+# cdp.py ships right next to this file inside the self-contained WeRead
+# directory; the browser directory is only a legacy fallback for installs that
+# predate that layout, so a partial update still works either way.
 #
 # Load it by path rather than by pushing a directory onto sys.path. Putting it
 # back afterwards leaves the interpreter exactly as it was, and the plain
@@ -16,8 +17,8 @@ import importlib.util as _importlib_util
 
 
 def _load_cdp():
-    for _candidate in ("/storage/roms/ports/browser",
-                       os.path.dirname(os.path.abspath(__file__))):
+    for _candidate in (os.path.dirname(os.path.abspath(__file__)),
+                       "/storage/roms/ports/browser"):
         _path = os.path.join(_candidate, "cdp.py")
         if not os.path.isfile(_path):
             continue

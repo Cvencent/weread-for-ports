@@ -7,17 +7,17 @@ from device import command, connect, evaluate
 
 
 FILES = {
-    "extension/content.js": "/storage/.config/weread-ext/content.js",
-    "extension/background-v8.1.js": "/storage/.config/weread-ext/background-v8.1.js",
-    "extension/shell.css": "/storage/.config/weread-ext/shell.css",
-    "extension/manifest.json": "/storage/.config/weread-ext/manifest.json",
-    "extension/telemetry-rules.json": "/storage/.config/weread-ext/telemetry-rules.json",
+    "extension/content.js": "/storage/roms/ports/weread/ext/content.js",
+    "extension/background-v8.1.js": "/storage/roms/ports/weread/ext/background-v8.1.js",
+    "extension/shell.css": "/storage/roms/ports/weread/ext/shell.css",
+    "extension/manifest.json": "/storage/roms/ports/weread/ext/manifest.json",
+    "extension/telemetry-rules.json": "/storage/roms/ports/weread/ext/telemetry-rules.json",
     "launcher/node.sh": "/storage/roms/ports/weread/node.sh",
     "launcher/window_guard.py": "/storage/roms/ports/weread/window_guard.py",
     "launcher/input_bridge.py": "/storage/roms/ports/weread/input_bridge.py",
-    "launcher/cdp.py": "/storage/roms/ports/browser/cdp.py",
-    "launcher/weread.gptk": "/storage/roms/ports/browser/weread.gptk",
-    "launcher/操作说明.txt": "/storage/roms/ports/browser/操作说明.txt",
+    "launcher/cdp.py": "/storage/roms/ports/weread/cdp.py",
+    "launcher/weread.gptk": "/storage/roms/ports/weread/weread.gptk",
+    "launcher/操作说明.txt": "/storage/roms/ports/weread/操作说明.txt",
     "ports/media/Weread.png": "/storage/roms/ports/media/Weread.png",
 }
 
@@ -29,19 +29,17 @@ def main():
     backup = "/storage/.config/weread-ui-backups/" + time.strftime("%Y%m%d-%H%M%S")
     try:
         command(client, "mkdir -p " + backup)
+        command(client, "mkdir -p /storage/roms/ports/weread/ext")
         with client.open_sftp() as sftp:
             for source, remote in files.items():
+                # Best-effort backup: a file may legitimately have no copy at
+                # its current path yet (a fresh install, or a layout change that
+                # moves the file). The real gate is the sha256 check after the
+                # atomic rename below, so a missing pre-copy must not abort.
                 try:
                     command(client, "cp " + remote + " " + backup + "/" + source.name)
                 except RuntimeError:
-                    # Files that a device may legitimately not have yet, so a
-                    # missing backup must not abort the whole deployment. cdp.py
-                    # joins this set because older installs never shipped it.
-                    optional = {"window_guard.py", "input_bridge.py", "cdp.py",
-                                "background-v8.1.js", "shell.css", "Weread.png",
-                                "telemetry-rules.json"}
-                    if source.name not in optional:
-                        raise
+                    print("no previous copy to back up:", source.name)
                 data = source.read_bytes().replace(b"\r\n", b"\n")
                 with sftp.file(remote + ".weread-new", "wb") as target:
                     target.write(data)

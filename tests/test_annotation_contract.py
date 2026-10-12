@@ -38,7 +38,7 @@ class AnnotationContractTests(unittest.TestCase):
     def test_launcher_deploys_the_updated_stick_mapping(self):
         deploy = (ROOT / "tests/deploy.py").read_text(encoding="utf-8")
         final_state = (ROOT / "tests/final_state.py").read_text(encoding="utf-8")
-        remote = '"/storage/roms/ports/browser/weread.gptk"'
+        remote = '"/storage/roms/ports/weread/weread.gptk"'
         self.assertIn('"launcher/weread.gptk": ' + remote, deploy)
         self.assertIn('"launcher/weread.gptk": ' + remote, final_state)
 
