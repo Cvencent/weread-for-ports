@@ -320,24 +320,60 @@ python -m unittest discover -s tests -p "test_discovery.py"
 | SoC / GPU | RK3566，Mali-G52 |
 | 分辨率 / 内存 | 640×480，1GB |
 | 系统 | ROCKNIX + Sway + EmulationStation + PortMaster |
-| 图形加速 | ⚠️ **未真正启用**，见下方「图形加速现状」 |
+| 图形加速 | ✅ Mali-G52 硬件渲染（ANGLE / Vulkan），实测证据见下方 |
 
-### 图形加速现状（实测，请先读这段）
+### 图形加速（实测结论，请先读这段）
 
-在 X35S 上实测的结论，和「用了 GPU 加速」的直觉相反：
+在 X35S 上做过一轮逐个后端的真机测试，结论是：**GPU 硬件渲染是真的在跑的**。
 
-- **视频硬解：没有开。** 启动器没有任何 VAAPI 相关 flag，Chromium 默认也不开 VAAPI
-  硬解；设备 `/dev/dri/` 下只有 `card0`、没有 `renderD*` 节点。设备本身带
-  `hantro_vpu` 硬件解码模块，但未被使用。
-  **对本项目无影响**——微信读书是文字阅读器，不播放视频，硬解对它没有意义。
-- **GPU 渲染：实际走的是软件路径。** 启动器要求 ANGLE 走 Vulkan，但日志里明确报
-  `--ozone-platform=wayland is not compatible with Vulkan`，并连续出现
-  `Failed to create vulkan surface`；Chromium 的 GPU 进程**没有映射任何
-  GL/EGL/GBM 库**（设备上其实有 `libmali-bifrost-g52-*-wayland-gbm.so`，只是没被加载）。
+**已启用的硬件路径：**
 
-**页面显示正常**（书架、目录、正文 canvas 均正常渲染），所以这个缺陷目前没有暴露成
-用户可见问题。但它意味着那两行 GPU flag 并未达到本意，**在 GPU 栈不同的设备上更容易
-直接失败**。这一点对判断下面的 R36S 兼容性很关键。
+```
+--use-gl=angle --use-angle=vulkan
+--ozone-platform=wayland
+--enable-features=UseOzonePlatform      # 注意：里面不能加 Vulkan
+--ignore-gpu-blocklist --enable-gpu-rasterization
+```
+
+三条独立证据（均为真机实测）：
+
+| 证据 | 结果 |
+| --- | --- |
+| `vulkaninfo` | 枚举 `Mali-G52`，`deviceType = INTEGRATED_GPU` |
+| 页面 WebGL renderer（CDP `Runtime.evaluate`） | `ANGLE (ARM, Vulkan 1.3.276 (Mali-G52 (0x74021000)), Mali-G52)` |
+| GPU 进程已加载的库（`/proc/<gpu-pid>/maps`） | `libmali-vulkan-g52.so`、`libmali-hook.so.1.9.0`、`libgbm.so.1` |
+
+日志里出现的 `swiftshader` 次数为 **0**，也没有任何 `swrast` 回退。
+
+**一个需要注意的表面错误（不影响页面，已修）：**
+
+旧版在 `--enable-features` 里额外带了 `Vulkan`，这会让 Chromium 尝试给
+Wayland 合成器建 Vulkan surface，而这条路在本机必然失败：
+
+```
+'--ozone-platform=wayland' is not compatible with Vulkan
+Failed to create vulkan surface          # 旧版每次启动 6 次
+```
+
+把 `Vulkan` 从 `--enable-features` 里删掉后，该错误降到 **1 次**，
+而页面 WebGL 依然是同一个 **Mali-G52** 驱动，书架页渲染结果完全一致。
+这个修改已随 v1.2 发布，并有回归测试
+`tests/test_launcher_gpu_flags.py` 防止它被改回去。
+
+**其他后端的实测结果（都是真实 Wayland 窗口，非 headless）：**
+
+| 后端 | 结果 |
+| --- | --- |
+| `--use-angle=vulkan` | ✅ Mali-G52（已采用） |
+| `--use-angle=gl` / `gles` | ❌ WebGL 直接不可用（headless 下会假性报上 Mali，不可信） |
+| `--use-angle=swiftshader` | ⚠️ 纯软渲染 |
+| `--use-gl=egl` / `gl`（原生） | ❌ 构建不包含，启动即拒绝 |
+
+**视频硬解（VAAPI）：仍然没有开。** 启动器没有任何
+VAAPI flag，设备 `/dev/dri/` 下也只有 `card0`、没有 `renderD*` 节点。
+**对本项目无影响**——微信读书是文字阅读器，不播放视频，
+硬解对它没有意义。上面说的“硬件加速”指的是
+**GPU 渲染加速**，不是视频解码。
 
 ### 很可能可用：Game Console R35S / R36S（未实测）
 
@@ -351,37 +387,41 @@ python -m unittest discover -s tests -p "test_discovery.py"
 | 分辨率 / 内存 | 640×480，1GB | ✅ |
 | SoC / GPU | RK3326，Mali-G31 | ⚠️ 见下 |
 
-**唯一实质风险是 GPU。** 启动器为 Chromium 指定了：
+**实质风险在 GPU 栈。** 启动器把 Chromium 指向
+`--use-angle=vulkan`，而这个后端在正确配置下依赖设备提供**真实的 Vulkan
+ICD**（硬件驱动）。X35S 上这个 ICD 是
+`/usr/share/vulkan/icd.d/mali.json` → `libmali-vulkan-g52.so`，R36S 上是哪个就不一样了。
 
-```sh
---use-gl=angle --use-angle=vulkan
-```
+Mali-G31 上的 Vulkan 支持在 ROCKNIX 上属于**u5b9e验性质**（官方走 libmali
+GLES 3.2 + Panfrost GL/GLES 3.1），所以 R36S 上有三种可能结果：
 
-而如上所述，这个组合在**已验证的 X35S 上都没能真正启用**。R36S 的 Mali-G31 情况只会
-更弱：ROCKNIX 在它上面用的是 **libmali（GLES 3.2）+ Panfrost（GL/GLES 3.1）**，
-而 **Vulkan 支持在 Mali-G31 上属于实验性质**，ANGLE 的 Vulkan 后端大概率起不来。
+| 情况 | 表现 | 处理 |
+| --- | --- | --- |
+| ICD 正常 | 与 X35S 一致，Mali-G31 硬件渲染 | 无需处理 |
+| ICD 存在但后端不可用 | WebGL 失效，页面保守降级 | 返回下方调试参数 |
+| ICD 缺失 | 同上 | 返回下方调试参数 |
 
-Chromium 通常会在硬件后端不可用时回退到软件渲染，页面**大概率仍能显示**（X35S 就是
-这样"能显示但没加速"），但 R36S 的 GPU 栈与 X35S 不同，**白屏或渲染异常的风险明显更高**。
-这一点需要实机确认，我没有 R36S 无法替它打包票。
+**白屏风险很低。** 即使硬件后端完全不可用，Chromium 会回退到
+SwiftShader 软渲染——X35S 上我们已经实测过 `--use-angle=swiftshader`，
+页面会正常显示（只是慢）。所以真正的风险不是白屏，
+而是**变卡**（渲染缓慢）。
 
 如果 R36S 上出现白屏 / 渲染不对，临时验证办法是编辑
-`/storage/roms/ports/weread/node.sh`，把第 233 行改成软渲染或 GL 后端再启动：
+`/storage/roms/ports/weread/node.sh`，把 GPU 那两行换成（任选一）：
 
 ```sh
-# 任选其一，按设备实际支持情况试
---use-gl=angle --use-angle=gl        # 走 OpenGL / GLES
---use-gl=swiftshader                 # 纯软件渲染，必定能显示，但会慢
+--use-angle=swiftshader    # 纯软件渲染，必定能显示，但会慢
+--use-gl=angle --use-angle=gl   # 走硬件 GL/GLES（X35S 实测得不到 WebGL，别容易只能补救展示）
 ```
 
-> 如果你在 R36S（或别的掌机）上实测通过，请把结果反馈上来——本文档里这行
-> 「很可能可用」就可以改成「已验证」，连带把上面的规格表补全。
+> 我手上没有 R36S，无法实机验证。如果你在 R36S（或别的掌机）上
+> 实测通过，请把结果反馈上来——文档里这行「很可能可用」就可以改成「已验证」。
 
 ## 已知限制
 
 - 只在 X35S 上完成真机验证。其他 Ports 设备需自行确认 Chromium、Wayland/Sway、
   PortMaster、屏幕分辨率、按键映射，以及 **GPU 后端是否可用**（见上方设备兼容性）。
-- **GPU 加速与视频硬解均未启用**，当前依赖软件渲染兜底；显示正常但会占用更多 CPU。
+- **GPU 渲染已硬件化**（X35S 实测 Mali-G52）；**视频硬解未启用**，但微信读书不播视频，对本项目无影响。
 - 首次启动可能较慢，取决于网络和 Chromium 加载速度。
 - 搜索键盘输入小写 ASCII/拼音，实际匹配由微信读书决定。
 - 正文、目录和字体设置使用站方阅读器，不修改 `.readerChapterContent` 和

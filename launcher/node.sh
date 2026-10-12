@@ -225,6 +225,17 @@ fi
 #  ⚠️ 内存：本机仅 976MB RAM（实测 跑一段时间后 available 仅 ~387MB，swap 已用 208MB）
 #     ⇒ 必须限制渲染进程数与 JS 堆，否则页面越用越卡、阅读器加载超时。
 cd "$BROWSER_DIR/chromium" || exit 1
+#  ── GPU：走硬件，不要加 Vulkan feature ───────────────────
+#  --use-angle=vulkan 让 ANGLE 走 Mali-G52 硬件。设备实测证据：
+#      页面 WebGL renderer = "ANGLE (ARM, Vulkan 1.3.276 (Mali-G52 (0x74021000)), Mali-G52)"
+#      GPU 进程加载了 libmali-vulkan-g52.so / libmali-hook.so.1.9.0 / libgbm.so.1
+#      日志里 swiftshader 次数为 0，无 swrast 回退。
+#  ⚠️ --enable-features 里绝不能再带 Vulkan：带上它会让 Chromium
+#      尝试给 Wayland 合成器建 Vulkan surface，而这条路在本机必然失败（旧版
+#      每次启动刷 6 次 "Failed to create vulkan surface"）。删掉后降到 1 次，
+#      而页面 WebGL 依然是同一个 Mali-G52 驱动。
+#  ⚠️ 其他后端都不可用：真实 Wayland 窗口下 gl/gles 拿不到 WebGL
+#      （headless 下会假性报上 Mali，不可信）；swiftshader 则是纯软渲染。
 ./chrome \
   --test-type \
   --app="https://weread.qq.com/web/shelf" \
@@ -232,7 +243,7 @@ cd "$BROWSER_DIR/chromium" || exit 1
   --disable-dev-shm-usage \
   --use-gl=angle --use-angle=vulkan \
   --ozone-platform=wayland \
-  --enable-features=UseOzonePlatform,Vulkan \
+  --enable-features=UseOzonePlatform \
   --ignore-gpu-blocklist \
   --enable-gpu-rasterization \
   --renderer-process-limit=2 \
