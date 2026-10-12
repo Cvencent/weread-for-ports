@@ -95,6 +95,82 @@
     }, 12000);
   })();
 
+  /* The boot mask goes up at document_start, but its only release used to be
+     requestAnimationFrame(releaseBootMask) inside boot(), and boot() is gated on
+     DOMContentLoaded. The site loads a payment widget synchronously in <head>, so
+     a stalled host meant the mask went up, the release never ran, and the
+     handheld sat on a blank screen that no key could drive. The reload above
+     fires once per session, which is not enough when the same host keeps
+     stalling.
+
+     This watchdog makes the mask unable to outlive a broken document:
+       1. release it as soon as a real body exists, so the normal path never
+          depends on boot() winning the race against a slow head;
+       2. spend a bounded number of reloads while the document stays wedged, so a
+          transient stall recovers on its own;
+       3. once that budget is gone, stop reloading and let Enter reload on demand,
+          so the user always keeps a working way out. */
+  (function guardBootMask() {
+    var RETRY_KEY = 'wr-hh-boot-retry-' + location.pathname;
+    var MAX_RETRIES = 3;
+    var STALL_MS = 12000;
+    var exhausted = false;
+
+    function readRetries() {
+      try { return parseInt(sessionStorage.getItem(RETRY_KEY) || '0', 10) || 0; }
+      catch (x) { return 0; }
+    }
+
+    function wedged() {
+      return !document.body;
+    }
+
+    function clearRetries() {
+      try { sessionStorage.removeItem(RETRY_KEY); } catch (x) {}
+    }
+
+    function retry() {
+      /* Drop the mask before bouncing so the reload never reads as frozen. */
+      releaseBootMask();
+      try { window.location.reload(); }
+      catch (x) { clearRetries(); exhausted = false; }
+    }
+
+    function settle() {
+      if (wedged()) return;
+      clearRetries();
+      if (document.readyState !== 'loading') releaseBootMask();
+    }
+
+    document.addEventListener('DOMContentLoaded', settle);
+    document.addEventListener('readystatechange', settle);
+
+    setTimeout(function tick() {
+      if (!wedged()) { settle(); return; }
+      if (exhausted) return;
+      var used = readRetries();
+      if (used < MAX_RETRIES) {
+        try { sessionStorage.setItem(RETRY_KEY, String(used + 1)); } catch (x) {}
+        retry();
+        /* A reload that lands ends the chain; one that throws falls through to
+           here, so the timer can never hot-loop. */
+        setTimeout(tick, STALL_MS);
+        return;
+      }
+      exhausted = true;
+      setBootMaskText('加载未完成，按 Enter 重新加载');
+      document.addEventListener('keydown', function onRetry(e) {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        e.stopPropagation();
+        document.removeEventListener('keydown', onRetry, true);
+        exhausted = false;
+        clearRetries();
+        retry();
+      }, true);
+    }, STALL_MS);
+  })();
+
   var FOCUS = 'wr-hh-focus';
   var NAV = 'wr-hh-nav';
   var MENU = 'wr-hh-menu';
