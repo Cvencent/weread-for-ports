@@ -320,6 +320,24 @@ python -m unittest discover -s tests -p "test_discovery.py"
 | SoC / GPU | RK3566，Mali-G52 |
 | 分辨率 / 内存 | 640×480，1GB |
 | 系统 | ROCKNIX + Sway + EmulationStation + PortMaster |
+| 图形加速 | ⚠️ **未真正启用**，见下方「图形加速现状」 |
+
+### 图形加速现状（实测，请先读这段）
+
+在 X35S 上实测的结论，和「用了 GPU 加速」的直觉相反：
+
+- **视频硬解：没有开。** 启动器没有任何 VAAPI 相关 flag，Chromium 默认也不开 VAAPI
+  硬解；设备 `/dev/dri/` 下只有 `card0`、没有 `renderD*` 节点。设备本身带
+  `hantro_vpu` 硬件解码模块，但未被使用。
+  **对本项目无影响**——微信读书是文字阅读器，不播放视频，硬解对它没有意义。
+- **GPU 渲染：实际走的是软件路径。** 启动器要求 ANGLE 走 Vulkan，但日志里明确报
+  `--ozone-platform=wayland is not compatible with Vulkan`，并连续出现
+  `Failed to create vulkan surface`；Chromium 的 GPU 进程**没有映射任何
+  GL/EGL/GBM 库**（设备上其实有 `libmali-bifrost-g52-*-wayland-gbm.so`，只是没被加载）。
+
+**页面显示正常**（书架、目录、正文 canvas 均正常渲染），所以这个缺陷目前没有暴露成
+用户可见问题。但它意味着那两行 GPU flag 并未达到本意，**在 GPU 栈不同的设备上更容易
+直接失败**。这一点对判断下面的 R36S 兼容性很关键。
 
 ### 很可能可用：Game Console R35S / R36S（未实测）
 
@@ -339,13 +357,13 @@ python -m unittest discover -s tests -p "test_discovery.py"
 --use-gl=angle --use-angle=vulkan
 ```
 
-- X35S 的 Mali-G52 有可用的 Vulkan，ANGLE 走 Vulkan 后端没问题（尽管日志里仍有
-  `Failed to create vulkan surface` 告警）。
-- R36S 的 Mali-G31 走的是另一条路：ROCKNIX 用 **libmali（GLES 3.2）+ Panfrost（GL/GLES 3.1）**，
-  而 **Vulkan 支持在 Mali-G31 上属于实验性质**，ANGLE 的 Vulkan 后端很可能起不来。
+而如上所述，这个组合在**已验证的 X35S 上都没能真正启用**。R36S 的 Mali-G31 情况只会
+更弱：ROCKNIX 在它上面用的是 **libmali（GLES 3.2）+ Panfrost（GL/GLES 3.1）**，
+而 **Vulkan 支持在 Mali-G31 上属于实验性质**，ANGLE 的 Vulkan 后端大概率起不来。
 
-Chromium 通常会在 Vulkan 后端不可用时自动回退到 GL，页面大概率仍能显示，但**有可能
-白屏或渲染异常**——这需要实机确认，我无法在没有设备的情况下替它打包票。
+Chromium 通常会在硬件后端不可用时回退到软件渲染，页面**大概率仍能显示**（X35S 就是
+这样"能显示但没加速"），但 R36S 的 GPU 栈与 X35S 不同，**白屏或渲染异常的风险明显更高**。
+这一点需要实机确认，我没有 R36S 无法替它打包票。
 
 如果 R36S 上出现白屏 / 渲染不对，临时验证办法是编辑
 `/storage/roms/ports/weread/node.sh`，把第 233 行改成软渲染或 GL 后端再启动：
@@ -363,6 +381,7 @@ Chromium 通常会在 Vulkan 后端不可用时自动回退到 GL，页面大概
 
 - 只在 X35S 上完成真机验证。其他 Ports 设备需自行确认 Chromium、Wayland/Sway、
   PortMaster、屏幕分辨率、按键映射，以及 **GPU 后端是否可用**（见上方设备兼容性）。
+- **GPU 加速与视频硬解均未启用**，当前依赖软件渲染兜底；显示正常但会占用更多 CPU。
 - 首次启动可能较慢，取决于网络和 Chromium 加载速度。
 - 搜索键盘输入小写 ASCII/拼音，实际匹配由微信读书决定。
 - 正文、目录和字体设置使用站方阅读器，不修改 `.readerChapterContent` 和
