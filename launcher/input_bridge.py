@@ -3,6 +3,7 @@
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
+import socket
 import sys
 
 # cdp.py ships next to this file and is also copied into the browser directory
@@ -191,6 +192,23 @@ def click_action(action):
 
 
 class Handler(BaseHTTPRequestHandler):
+    # The only client is the MV3 worker on loopback, and a request that hangs
+    # occupies one of the server's threads. Bound the socket so a stalled or
+    # hostile peer cannot pin a thread forever.
+    timeout = 5
+
+    def _reply(self, status, result):
+        body = json.dumps(result).encode()
+        try:
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except OSError:
+            # The caller hung up mid-response. There is nobody left to tell.
+            pass
+
     def do_POST(self):
         status, result = 400, {"ok": False}
         try:
@@ -199,19 +217,32 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
             if not 0 < length <= 128:
                 raise ValueError("Invalid request size")
-            action = json.loads(self.rfile.read(length)).get("action")
+            payload = self.rfile.read(length)
+            # read() can stop short when the peer closes early or stalls; JSON
+            # parsing then catches it, but checking here keeps the failure named.
+            if len(payload) != length:
+                raise ValueError("Incomplete request body")
+            action = json.loads(payload).get("action")
             if action not in SELECTORS:
                 raise ValueError("Invalid action")
             result = click_action(action)
             status = 200
-        except (OSError, ValueError, KeyError, RuntimeError):
+        except Exception:
+            # Catch broadly on purpose. This handler answers one small local
+            # request and the only contract that matters is that the caller
+            # always gets a JSON body: naming a few exception types let anything
+            # else (a TypeError from a CDP payload, an IndexError from a decoded
+            # structure) escape and drop the connection with no response at all,
+            # which the worker can only report as a network failure.
             pass
-        body = json.dumps(result).encode()
-        self.send_response(status)
-        self.send_header("Content-Type", "application/json")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
+        self._reply(status, result)
+
+    def handle_one_request(self):
+        try:
+            super().handle_one_request()
+        except socket.timeout:
+            # Silence the base class's traceback for an idle client.
+            self.close_connection = True
 
     def log_message(self, *_args):
         pass
