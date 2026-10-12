@@ -1,12 +1,12 @@
-# WeRead for Ports v12 发布说明
+# WeRead for Ports v1.0 发布说明
 
 发布日期：2026-10-12
 
 ## 重点更新：装法改成真正的「丢个包就完事」
 
-上一版虽然把文件收拢成了一个自包含目录，但装它仍然要 SSH 进掌机敲
-`bash ports/install.sh`。这一版把微信读书改成**合规的 PortMaster port**，普通用户在
-PortMaster 界面里点一下就装好，全程不碰命令行。
+微信读书是**合规的 PortMaster port**：普通用户在 PortMaster 界面里点一下就装好，
+全程不碰命令行，不需要 SSH。此前它只能 SSH 进掌机敲 `bash ports/install.sh`；从本
+版本起，安装方式改为标准的 PortMaster 端口。
 
 协议不是猜的，是从设备上 PortMaster 自己的源码读出来的
 （`pylibs/harbourmaster/{harbour,captain,info}.py`、`control.txt`）：

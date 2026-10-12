@@ -1,6 +1,6 @@
 # WeRead for Ports / 微信读书 Ports 平台适配方案
 
-> 当前发布：**v12**（2026-10-12），发布说明见 [`docs/release-v12.md`](docs/release-v12.md)。
+> 当前发布：**v1.0**（2026-10-12），发布说明见 [`docs/release-v1.0.md`](docs/release-v1.0.md)。
 
 
 把微信读书网页版封装成适合 **Ports 掌机**使用的无触屏阅读客户端。项目当前已在
@@ -68,10 +68,10 @@ screenshots/           脱敏后的真机界面截图
 
 ### 1. 下载 `weread.zip`
 
-从 GitHub Releases 下载（最新 v12）：
+从 GitHub Releases 下载（最新 v1.0）：
 
 ```text
-https://github.com/Cvencent/weread-for-ports/releases/download/v12/weread.zip
+https://github.com/Cvencent/weread-for-ports/releases/download/v1.0/weread.zip
 ```
 
 约 98KB。同目录下还有 `weread.zip.sha256`，可选校验：
