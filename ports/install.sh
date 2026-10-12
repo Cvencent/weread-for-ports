@@ -34,15 +34,26 @@ done
 cp "$ROOT/ports/Weread.sh" "$PORTS_DIR/Weread.sh"
 cp "$ROOT/ports/media/Weread.png" "$PORTS_DIR/media/Weread.png"
 
-# Permissions in two passes instead of a line per file.
+# Ship exactly what weread.zip ships, so an SSH install and a PortMaster install
+# end up with the same tree and share one self-bootstrapping code path: the
+# PortMaster metadata, the cover and the gamelist helper all live in weread/,
+# where node.sh looks for them on first launch.
+cp "$ROOT/ports/port.json" "$WEREAD_DIR/port.json"
+cp "$ROOT/ports/media/Weread.png" "$WEREAD_DIR/Weread.png"
+cp "$ROOT/ports/update_gamelist.py" "$WEREAD_DIR/update_gamelist.py"
+cp "$ROOT/ports/gamelist.fragment.xml" "$WEREAD_DIR/gamelist.fragment.xml"
+
+# Permissions in a few passes instead of a line per file.
 find "$WEREAD_DIR" -type f -name '*.py' -exec chmod 755 {} +
 chmod 755 "$WEREAD_DIR/node.sh" "$PORTS_DIR/Weread.sh"
-chmod 644 "$WEREAD_DIR/weread.gptk" "$WEREAD_DIR/操作说明.txt"
+find "$WEREAD_DIR" -maxdepth 1 -type f ! -name '*.py' ! -name node.sh \
+  -exec chmod 644 {} +
 find "$WEREAD_DIR/ext" -type f -exec chmod 644 {} +
 
 # EmulationStation finds Weread.sh on its own; this only adds a curated
 # Chinese-named entry with the icon, preserving everything else in the file.
-# Set WEREAD_GAMELIST=0 for a pure drop-in with no gamelist edit at all.
+# Set WEREAD_GAMELIST=0 to skip it here -- node.sh then registers the same
+# entry from the copy inside weread/ on first launch.
 if [ "${WEREAD_GAMELIST:-1}" = 1 ]; then
   python3 "$ROOT/ports/update_gamelist.py" \
     "$PORTS_DIR/gamelist.xml" \

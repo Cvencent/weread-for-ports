@@ -1,0 +1,28 @@
+{
+    "version": 2,
+    "name": "weread.zip",
+    "items": [
+        "weread/",
+        "Weread.sh"
+    ],
+    "items_opt": [],
+    "attr": {
+        "title": "微信读书",
+        "desc": "微信读书掌机版，面向 Ports 掌机优化的无触屏阅读客户端。支持手柄导航、书架与发现、阅读翻页、目录、搜索和字号设置，登录状态保存在本机。",
+        "inst": "",
+        "genres": [
+            "阅读工具"
+        ],
+        "porter": [
+            "Cvencent"
+        ],
+        "image": {
+            "Weread.png": "weread/Weread.png"
+        },
+        "rtr": false,
+        "exp": false,
+        "runtime": null,
+        "reqs": [],
+        "arch": []
+    }
+}

@@ -30,7 +30,7 @@
 # directory swap. The Chromium binary belongs to the Browser port and the login
 # profile belongs to the user; both are borrowed, never shipped.
 HERE="$(cd "$(dirname "$0")" && pwd)"
-BROWSER_DIR="${WEREAD_BROWSER_DIR:-/storage/roms/ports/browser}"  # Browser port's Chromium
+PORTS_DIR="$(dirname "$HERE")"
 EXT="$HERE/ext"                      # our unpacked extension
 PROFILE="${WEREAD_PROFILE:-/storage/.config/weread-profile}"
 LOG="$HERE/weread.log"
@@ -41,8 +41,35 @@ WINDOW_GUARD="$HERE/window_guard.py"
 INPUT_BRIDGE="$HERE/input_bridge.py"
 CDP_TOOL="$HERE/cdp.py"
 GPTK="$HERE/weread.gptk"
+COVER_SRC="$HERE/Weread.png"
+MEDIA_DIR="$PORTS_DIR/media"
+# Browser port's Chromium. Derived from where this port actually lives
+# so it keeps working on systems whose ports folder is not /storage/roms.
+BROWSER_DIR="${WEREAD_BROWSER_DIR:-$PORTS_DIR/browser}"
+GAMELIST="$PORTS_DIR/gamelist.xml"
 
 # ---------------- 单实例锁 ----------------
+# PortMaster installs a port by unpacking the zip; it never runs install.sh,
+# so make the port self-installing on first launch: publish the cover to the
+# shared media directory and add the curated gamelist entry. Both steps are
+# idempotent and never touch the login profile.
+bootstrap_port() {
+  mkdir -p "$MEDIA_DIR" 2>/dev/null || true
+  if [ -f "$COVER_SRC" ] && [ ! -f "$MEDIA_DIR/Weread.png" ]; then
+    cp -f "$COVER_SRC" "$MEDIA_DIR/Weread.png" 2>/dev/null || true
+    chmod 644 "$MEDIA_DIR/Weread.png" 2>/dev/null || true
+  fi
+  if [ -f "$GAMELIST" ] && ! grep -q "Weread.sh" "$GAMELIST" 2>/dev/null; then
+    # Both files ship inside weread/, so they sit next to this script rather
+    # than one level up; a PortMaster install never has the ports root copy.
+    if [ -f "$HERE/update_gamelist.py" ]; then
+      python3 "$HERE/update_gamelist.py" "$GAMELIST" \
+        --fragment "$HERE/gamelist.fragment.xml" >/dev/null 2>&1 || true
+    fi
+  fi
+}
+bootstrap_port
+
 acquire_lock() {
   local tries=0
   while ! mkdir "$LOCKDIR" 2>/dev/null; do
