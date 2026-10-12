@@ -6,8 +6,11 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 ARCHIVE = ROOT / "output" / "weread-for-ports-source.zip"
+# tools/ holds the lint config test_extension_static.py runs, so the packaged
+# repository can still run its own checks after being unpacked elsewhere.
 INCLUDE = ("README.md", ".gitignore", ".gitattributes",
-           "extension", "launcher", "ports", "docs", "tests", "screenshots")
+           "extension", "launcher", "ports", "docs", "tests", "tools",
+           "screenshots")
 
 
 def iter_files():
