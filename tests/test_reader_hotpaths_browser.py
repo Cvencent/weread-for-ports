@@ -21,7 +21,6 @@ Measured in real Chromium: annotationItems() goes from ~8.5 layout reads per
 wrapper to exactly 1 (332 -> 40 at 40 wrappers, 1018 -> 120 at 120), with an
 identical returned order.
 """
-import json
 import pathlib
 import re
 import unittest

@@ -1,6 +1,5 @@
 """Measure actual browser work, or reproduce a failed chapter request."""
 import base64
-import json
 from pathlib import Path
 import sys
 

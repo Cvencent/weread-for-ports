@@ -1,11 +1,11 @@
 """Count page DOM mutations during a reader open (proxy for shell observer wakeups)."""
-import base64, json, sys
+import base64, sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from device import connect, command
 
 remote = r'''
-import sys, json, time, subprocess
+import sys, time, subprocess
 sys.path.insert(0, "/storage/roms/ports/browser")
 import cdp
 ws = cdp.WS(cdp.pick_page_target()["webSocketDebuggerUrl"])

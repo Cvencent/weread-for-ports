@@ -1,6 +1,5 @@
 """Delay shelf rendering and activate the shell timeout retry by gamepad."""
 import base64
-import json
 from pathlib import Path
 import sys
 

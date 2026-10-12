@@ -27,7 +27,7 @@ import pathlib
 import re
 import unittest
 
-from playwright.sync_api import sync_playwright, sync_playwright as _sp  # noqa: F401
+from playwright.sync_api import sync_playwright
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]

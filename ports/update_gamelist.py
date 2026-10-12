@@ -3,7 +3,6 @@
 from pathlib import Path
 import argparse
 import os
-import re
 import tempfile
 from xml.etree import ElementTree as ET
 

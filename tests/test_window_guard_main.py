@@ -14,7 +14,6 @@ real get_tree call, the real JSON parsing and the real repair dispatch under
 test while replacing only the external binary.
 """
 import importlib.util
-import io
 import json
 import pathlib
 import subprocess
@@ -44,7 +43,6 @@ class StubbedSubprocess:
         self.tree = tree
         self.behaviour = behaviour
         self.calls = []
-        outer = self
 
         class SubprocessError(Exception):
             pass

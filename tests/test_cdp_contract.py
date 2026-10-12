@@ -62,7 +62,7 @@ class CdpClientContractTests(unittest.TestCase):
     def test_deploy_tolerates_a_device_without_the_cdp_client_yet(self):
         # deploy.py backs up the installed files first. An older install has no
         # cdp.py on disk, so a missing backup must not abort the deployment.
-        self.assertRegex(self.deploy, 'optional = \{[^}]*"cdp[.]py"')
+        self.assertRegex(self.deploy, r'optional = \{[^}]*"cdp[.]py"')
 
 
 if __name__ == "__main__":

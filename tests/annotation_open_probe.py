@@ -1,4 +1,4 @@
-import sys,time,json
+import sys, time
 sys.path.insert(0,'tests')
 from device import connect,evaluate,protocol,command
 c=connect()

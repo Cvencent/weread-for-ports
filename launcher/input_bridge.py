@@ -24,7 +24,6 @@ def _load_cdp():
         if _spec is None or _spec.loader is None:
             continue
         _module = _importlib_util.module_from_spec(_spec)
-        _sys_modules = sys.modules.get("cdp")
         _spec.loader.exec_module(_module)
         sys.modules["cdp"] = _module
         return _module

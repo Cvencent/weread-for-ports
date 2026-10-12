@@ -11,9 +11,7 @@ it cannot see the two browser-only halves of this change:
 
 sessionStorage is only real in a browser, so this runs in Chromium.
 """
-import json
 import pathlib
-import re
 import unittest
 
 from playwright.sync_api import sync_playwright

@@ -6,7 +6,6 @@ stubbed CDP client so it can run without a browser or a device.
 """
 import importlib.util
 import json
-import os
 import pathlib
 import shutil
 import tempfile

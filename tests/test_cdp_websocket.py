@@ -31,7 +31,6 @@ import pathlib
 import socket
 import struct
 import threading
-import time
 import unittest
 
 REPO = str(pathlib.Path(__file__).resolve().parents[1])
