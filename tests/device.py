@@ -1,6 +1,8 @@
 """Device helpers for real handheld acceptance tests.
 
-Set WEREAD_HOST and WEREAD_PASSWORD before running the scripts.
+Credentials come from the environment, or from a git-ignored `.device.env`
+file in the repository root, so a real handheld does not have to be re-typed
+in every session. That file stays local on purpose: it holds a password.
 """
 import argparse
 import base64
@@ -10,6 +12,46 @@ from pathlib import Path
 
 import paramiko
 
+LOCAL_ENV = Path(__file__).resolve().parent.parent / ".device.env"
+
+
+def load_local_env(path=LOCAL_ENV):
+    """Read the WEREAD_* keys from a local `.device.env` file.
+
+    A missing file is normal; it just means this checkout has no device yet.
+    """
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except OSError:
+        return {}
+    loaded = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.strip()
+        value = value.strip().strip(chr(39) + chr(34))
+        if key.startswith("WEREAD_") and value:
+            loaded[key] = value
+    return loaded
+
+
+LOCAL = load_local_env()
+
+
+def setting(name, default=None):
+    """Read one connection setting, environment first, then `.device.env`.
+
+    Falling back to the file on every lookup rather than only at import time
+    keeps the device configured even if something else in the process clears
+    the environment, which would otherwise skip the real-hardware tests.
+    """
+    value = os.environ.get(name)
+    if value:
+        return value
+    return LOCAL.get(name, default)
+
 
 def missing_credentials():
     """True when the handheld is not configured for this run.
@@ -18,18 +60,19 @@ def missing_credentials():
     checkout that has no credentials. Callers should skip instead of erroring:
     a missing device is a skipped test, not a broken one.
     """
-    return not (os.environ.get("WEREAD_HOST") and os.environ.get("WEREAD_PASSWORD"))
+    return not (setting("WEREAD_HOST") and setting("WEREAD_PASSWORD"))
 
 
 def connect(host=None, username=None, password=None, port=None):
-    host = host or os.environ.get("WEREAD_HOST")
-    username = username or os.environ.get("WEREAD_USER", "root")
-    password = password or os.environ.get("WEREAD_PASSWORD")
+    host = host or setting("WEREAD_HOST")
+    username = username or setting("WEREAD_USER", "root")
+    password = password or setting("WEREAD_PASSWORD")
     if not host or not password:
-        raise ValueError("Set WEREAD_HOST and WEREAD_PASSWORD in the environment")
+        raise ValueError("Set WEREAD_HOST and WEREAD_PASSWORD in the environment "
+                         "or put them in a .device.env file next to the repository")
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(host, port=int(port or os.environ.get("WEREAD_SSH_PORT", "22")),
+    client.connect(host, port=int(port or setting("WEREAD_SSH_PORT", "22")),
                    username=username, password=password, timeout=12,
                    look_for_keys=False, allow_agent=False)
     return client

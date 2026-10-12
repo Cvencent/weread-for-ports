@@ -55,6 +55,21 @@ def selected(client):
     })()""")
 
 
+def focus_a_book(client, limit=12):
+    """Walk focus down until it lands on a shelf book.
+
+    Where focus starts on the shelf depends on what ran before, and the nav
+    tabs sit above the grid, so a single Down press can stay on the nav. Move
+    until the focused element actually links into the reader.
+    """
+    for _ in range(limit):
+        current = selected(client)
+        if current and current.get("href") and "/web/reader/" in current["href"]:
+            return current
+        press(client, "down")
+    return selected(client)
+
+
 def canvas_state(client):
     return evaluate(client, """(function(){
       return Array.from(document.querySelectorAll('canvas')).filter(c=>c.width>200&&c.height>200).map(c=>{
@@ -73,6 +88,24 @@ def reach_text_page(client):
             raise AssertionError("No drawn text after eight next-page inputs")
         press(client, "r1")
         time.sleep(1)
+
+
+def rewind_to_start(client, limit=14):
+    """Walk back to the first page so R1 has somewhere to go.
+
+    Which book the shelf lands on depends on where focus happens to start, and
+    a book restores its last reading position. Asserting that R1 repaints from
+    there measures the book's length instead of pagination, so rewind first.
+    """
+    previous = canvas_state(client)
+    for _ in range(limit):
+        press(client, "l1")
+        time.sleep(1)
+        current = canvas_state(client)
+        if current == previous:
+            return current
+        previous = current
+    return previous
 
 
 def protected_layout(client):
@@ -147,21 +180,23 @@ def main():
             (OUT / "v8-search-evidence.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=2), encoding="utf-8")
         evaluate(client, "window.__e2eOldDocument=true;location.reload();void 0")
         wait_for(client, "!window.__e2eOldDocument && !!document.querySelector('#wr-hh-nav .wr-hh-focus') && !!document.querySelector('.shelfBook')")
-        press(client, "down")
-        book = selected(client)
-        assert book and book["href"] and "/web/reader/" in book["href"]
+        book = focus_a_book(client)
+        assert book and book["href"] and "/web/reader/" in book["href"], \
+            f"Shelf focus never reached a book: {book}"
         press(client, "a")
         wait_for(client, "location.pathname.includes('/web/reader/') && document.querySelectorAll('canvas').length>0", 40)
         time.sleep(2)
         evidence["stepsToTextPage"] = reach_text_page(client)
-        before = canvas_state(client)
-        assert before
         geometry = protected_layout(client)
         capture(client, "v8-final-reader.png")
+        rewind_to_start(client)
+        before = canvas_state(client)
+        assert before, "The reader painted no canvas to page through"
         press(client, "r1")
         time.sleep(1)
         after = canvas_state(client)
-        assert after != before, "R1 did not change the reader canvas"
+        assert after != before, ("R1 did not change the reader canvas from the "
+                                 "chapter start, so pagination is not working")
         press(client, "l1")
         time.sleep(1)
         restored = canvas_state(client)

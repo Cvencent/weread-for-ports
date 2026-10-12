@@ -173,17 +173,24 @@ npx --yes eslint --config tools/eslint.config.mjs extension/content.js extension
 bash -n launcher/node.sh ports/install.sh ports/uninstall.sh ports/Weread.sh
 ```
 
-真机验收脚本需要 Python、`paramiko` 和可 SSH 连接的掌机。连接信息只通过环境变量提供：
+真机验收脚本需要 Python、`paramiko` 和可 SSH 连接的掌机。连接信息来自环境变量，
+或仓库根目录下 git 忽略的 `.device.env`（`tests/device.py` 会自动读取，真实环境变量优先）：
 
 ```sh
-export WEREAD_HOST=your-device-address
-export WEREAD_USER=root
-export WEREAD_PASSWORD=your-password
-python tests/e2e.py
+# .device.env，一次配好即可；该文件已在 .gitignore 中
+WEREAD_HOST=your-device-address
+WEREAD_USER=root
+WEREAD_PASSWORD=your-password
+WEREAD_SSH_PORT=22
 ```
 
-不要把真实地址、密码、登录 Cookie 或个人书架截图提交到仓库。验证记录见
-`docs/verification-v9.md`，架构说明见 `docs/architecture.md`。
+```sh
+python tests/e2e.py
+python -m unittest discover -s tests -p "test_discovery.py"
+```
+
+不要把真实地址、密码、登录 Cookie 或个人书架截图提交到仓库；`.device.env` 只留在本地。
+验证记录见 `docs/verification-v9.md`，架构说明见 `docs/architecture.md`。
 
 ## 已知限制
 

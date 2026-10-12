@@ -93,6 +93,28 @@ JSHeapUsedSize 为 51,382,944 字节，不是浏览器所有进程的内存占�
 最终长等待探针验证外壳真实计时器、真实手柄与重新导航，使用 DOM 渲染延迟样本。
 原生章节错误另用实际失败请求验证，不能把两者的结论混用。
 
+## 2026-10-12 全量复验（设备已验收）
+
+连接信息改为仓库根目录的 `.device.env`（git 忽略，`tests/device.py` 自动读取，
+环境变量优先），免得每次会话重新配置；`tests/test_device_env.py` 同时保证这个含密码的
+文件不会被打进源码包。
+
+重新部署后逐文件 `sha256sum` 比对，12 个运行文件与仓库完全一致；部署前备份见下节。
+本轮真机结果：
+
+- `python -m unittest discover -s tests -p "test_*.py"`：217 项通过，0 跳过
+  （含 6 项需要真机的 `test_discovery`）。
+- `tests/e2e.py`：书架/搜索/阅读翻页/目录/返回焦点全部断言通过。
+- `tests/settings_probe.py`：阅读设置 5 项通过，字号可反复调整并复原，
+  字体分类可激活、列表可滚动、焦点不被吸顶栏遮挡。
+- `tests/annotation_device_acceptance.py`：Insert 选中标注、Enter 打开、
+  Esc 关闭且留在阅读页，正文分页布局前后一致。
+
+复验中 `tests/e2e.py` 暴露了两处自身的脆弱点（不是产品缺陷，已修）：
+书架焦点起始位置不固定，按一次 ↓ 可能仍停在导航标签上，改为向下走到第一本书
+（`focus_a_book`）；书会恢复上次读到的末页，直接断言 R1 改画布等于在测书的长度，
+改为先回退到章首再断言（`rewind_to_start`）。
+
 ## 部署与恢复
 
 | 本地源码 | 掌机路径 |
@@ -101,7 +123,7 @@ JSHeapUsedSize 为 51,382,944 字节，不是浏览器所有进程的内存占�
 | `node.sh`、`window_guard.py`、`input_bridge.py` | `/storage/roms/ports/weread/` |
 | `操作说明.txt` | `/storage/roms/ports/browser/操作说明.txt` |
 
-最近部署前备份：`/storage/.config/weread-ui-backups/20261011-163353`。
+最近部署前备份：`/storage/.config/weread-ui-backups/20261012-085826`。
 早期验证记录保留在 `docs/legacy/`，当前仓库只发布可复现的脚本与脱敏后的证据摘要。
 扩展只加载 `shell.css`；后台脚本 URL 仍为 `background-v8.1.js`。
 
@@ -110,8 +132,18 @@ JSHeapUsedSize 为 51,382,944 字节，不是浏览器所有进程的内存占�
 
 ## 复现
 
-从仓库根目录运行；电脑需安装 Python 和 paramiko，并设置 `WEREAD_HOST`、
-`WEREAD_PASSWORD` 等连接环境变量。脚本通过 SSH 使用设备本机 CDP 和虚拟手柄。
+从仓库根目录运行；电脑需安装 Python 和 paramiko。连接信息放在仓库根目录的
+`.device.env`（已在 `.gitignore` 中，`tests/device.py` 自动读取），或用同名环境变量覆盖：
+
+```sh
+WEREAD_HOST=<掌机地址>
+WEREAD_USER=root
+WEREAD_PASSWORD=<密码>
+WEREAD_SSH_PORT=22
+```
+
+`.device.env` 含真实密码，只留在本地，不要提交，也不要打进源码包
+（`tests/test_device_env.py` 会检查这一点）。脚本通过 SSH 使用设备本机 CDP 和虚拟手柄。
 同一设备上的 UI 测试必须串行运行。
 
 ```powershell
