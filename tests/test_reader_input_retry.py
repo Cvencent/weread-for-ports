@@ -48,7 +48,7 @@ class ReaderInputRetryTests(unittest.TestCase):
 
     def test_worker_reports_bridge_failures_without_leaking_detail(self):
         self.assertIn("if (!response.ok) throw new Error('Input service unavailable');", WORKER)
-        self.assertIn("respond({ ok: false, error: error.message })", WORKER)
+        self.assertIn("finish({ ok: false, error: error.message })", WORKER)
 
 
 if __name__ == "__main__":

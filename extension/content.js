@@ -1213,6 +1213,20 @@
       var initialBusyContext = beginReaderBusy(action);
       watchReaderBusy(action, initialBusyContext);
     }
+    /* The worker's own 4s deadline normally guarantees a reply, but
+       sendMessage() has no such contract: a worker torn down mid-flight can drop
+       the channel, and readerInputPending gates every reader key, so a single
+       lost reply would wedge the reader for the life of the document. Budget the
+       round trip here as well. The worst legitimate chain is three 4s worker
+       budgets plus the 450ms and 1200ms backoffs in send(), so this sits well
+       above it: the guard exists for a lost callback, never for a slow retry. */
+    var attemptState = { done: false };
+    attemptState.timer = setTimeout(function () {
+      /* finish() is the single place that owns this cleanup and reports the
+         failure itself, so the timeout reuses it instead of duplicating the
+         unlock. */
+      finish(true, { error: 'Input service did not answer' });
+    }, 16000);
     var beforeFontLevel = action === 'font-previous' || action === 'font-next'
       ? document.body.className.match(/wr_reader_font_size_level_(\d+)/) : null;
     beforeFontLevel = beforeFontLevel ? beforeFontLevel[1] : '';
@@ -1221,6 +1235,9 @@
     var closing = action === 'close' ? openPanel() : null;
     if (closing) closing.setAttribute('data-wr-hh-active-panel', '1');
     function finish(resultFailed, result) {
+      if (attemptState.done) return;
+      attemptState.done = true;
+      clearTimeout(attemptState.timer);
       if (closing) closing.removeAttribute('data-wr-hh-active-panel');
       if (activating) activating.removeAttribute('data-wr-hh-activate');
       if (resultFailed && beforeFontLevel) {
