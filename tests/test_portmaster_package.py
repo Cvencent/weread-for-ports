@@ -11,7 +11,9 @@ until a user tries to install, so they are pinned here:
 import importlib.util
 import json
 import pathlib
+import shutil
 import stat
+import tempfile
 import unittest
 import zipfile
 
@@ -30,8 +32,15 @@ class PortMasterPackageTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.pkg = packager()
-        cls.pkg.main()
-        with zipfile.ZipFile(cls.pkg.ARCHIVE) as archive:
+        # Build into a scratch path. main() writes output/weread-lite.zip when
+        # the browser payload is absent (a bare runner), and output/weread.zip
+        # when it is present, so asking for an explicit path keeps the archive
+        # location deterministic in both cases.
+        scratch = pathlib.Path(tempfile.mkdtemp(prefix="weread-pkg-"))
+        cls.addClassCleanup(shutil.rmtree, scratch, True)
+        cls.archive = scratch / "weread.zip"
+        cls.pkg.build(cls.archive, browser=None)
+        with zipfile.ZipFile(cls.archive) as archive:
             cls.names = archive.namelist()
             cls.infos = {name: archive.getinfo(name) for name in cls.names}
             cls.port = json.loads(archive.read("weread/port.json").decode("utf-8"))

@@ -10,6 +10,7 @@ tagged release failing its own test step.
 """
 import builtins
 import io
+import os
 import pathlib
 import unittest
 
@@ -27,9 +28,10 @@ def _import(name, *args, **kwargs):
 def main():
     builtins.__import__ = _import
     root = pathlib.Path(__file__).resolve().parents[1]
-    suite = unittest.TestLoader().discover(str(root / "tests"),
-                                           pattern="test_*.py",
-                                           top_level_dir=str(root))
+    # Run from the repo root with the tests directory relative, which is how
+    # the README invokes the suite and the only form discover() accepts.
+    os.chdir(root)
+    suite = unittest.TestLoader().discover("tests", pattern="test_*.py")
     stream = io.StringIO()
     result = unittest.TextTestRunner(stream=stream, verbosity=0).run(suite)
     print(stream.getvalue().strip().splitlines()[-1])

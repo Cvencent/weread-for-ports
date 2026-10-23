@@ -28,6 +28,7 @@ import hashlib
 import importlib.util
 import json
 import pathlib
+import select
 import socket
 import struct
 import threading
@@ -152,13 +153,23 @@ class FakeServer(threading.Thread):
                       "Sec-WebSocket-Accept: " + accept + "\r\n\r\n").encode())
 
     def _drain(self, conn):
-        """Read the client's frames continuously so its buffers never fill."""
-        conn.settimeout(0.05)
+        """Read the client's frames continuously so its buffers never fill.
+
+        Uses select() rather than a socket timeout: settimeout applies to the
+        whole socket object, and this thread shares it with the sender. On
+        Linux that made the sender's sendall() inherit a 50ms deadline, so a
+        slow write raised socket.timeout and the remaining fragments were
+        dropped - which showed up as the client seeing a continuation first.
+        """
         while not self._stop.is_set():
             try:
-                chunk = conn.recv(4096)
-            except socket.timeout:
+                readable, _, _ = select.select([conn], [], [], 0.05)
+            except (OSError, ValueError):
+                return
+            if not readable:
                 continue
+            try:
+                chunk = conn.recv(4096)
             except OSError:
                 return
             if not chunk:
