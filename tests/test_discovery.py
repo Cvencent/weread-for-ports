@@ -5,15 +5,30 @@ import time
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from device import connect, evaluate, missing_credentials
-from e2e import press, selected, wait_for
+# paramiko is only needed to talk to a real handheld, so a checkout
+# without it (or without a device) skips rather than failing to import.
+try:
+    from device import connect, evaluate, missing_credentials
+    from e2e import press, selected, wait_for
+except ImportError as _err:
+    connect = evaluate = press = selected = wait_for = None
+    def missing_credentials():
+        return True
+    _DEVICE_IMPORT_ERROR = _err
+else:
+    _DEVICE_IMPORT_ERROR = None
 
 
 class DiscoveryTest(unittest.TestCase):
     def setUp(self):
         if missing_credentials():
             self.skipTest("no handheld configured: set WEREAD_HOST and WEREAD_PASSWORD")
-        self.client = connect()
+        try:
+            self.client = connect()
+        except Exception as err:
+            # An unreachable handheld is a skipped test, never a broken one:
+            # these navigate a live device and cannot run without it.
+            self.skipTest("handheld is unreachable: %s" % err)
         evaluate(self.client, """sessionStorage.removeItem('wr-hh-loading');
           sessionStorage.removeItem('wr-hh-return-key');
           sessionStorage.removeItem('wr-hh-discovery-return');

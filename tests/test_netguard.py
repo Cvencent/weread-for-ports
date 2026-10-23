@@ -16,12 +16,22 @@ shell function rather than a copy of it.
 """
 import pathlib
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-BASH = r"C:\Program Files\Git\bin\bash.exe"
+def bash_path():
+    """Where bash actually lives, so this runs on Windows and Linux."""
+    found = shutil.which("bash")
+    if found:
+        return found
+    for candidate in (r"C:\Program Files\Git\bin\bash.exe",
+                      r"C:\Program Files\Git\usr\bin\bash.exe"):
+        if pathlib.Path(candidate).exists():
+            return candidate
+    return None
 NODE_SH = ROOT / "launcher" / "node.sh"
 
 HARNESS = r"""
@@ -79,14 +89,19 @@ def netguard_source():
 
 
 class NetguardTests(unittest.TestCase):
+    def setUp(self):
+        self.bash = bash_path()
+        if not self.bash:
+            self.skipTest("bash is not available")
+
     def run_case(self, case):
         script = HARNESS % netguard_source()
         with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False,
                                          encoding="utf-8") as handle:
             handle.write(script)
             path = handle.name
-        result = subprocess.run([BASH, path, case], capture_output=True, text=True,
-                                encoding="utf-8", errors="replace")
+        result = subprocess.run([self.bash, path, case], capture_output=True,
+                                text=True, encoding="utf-8", errors="replace")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         for line in result.stdout.splitlines():
             if line.startswith("GATEWAY="):

@@ -4,7 +4,11 @@ import re
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-HANDOFF = pathlib.Path(r"D:\X35S\微信读书掌机版-交接包\源码")
+# An optional second copy of the mapping, kept by whoever prepared the
+# handoff bundle. It is not part of this repository, so the test only
+# checks it when it is actually present.
+HANDOFF = (pathlib.Path(__file__).resolve().parents[2]
+           / "\u5fae\u4fe1\u8bfb\u4e66\u638c\u673a\u7248-\u4ea4\u63a5\u5305" / "\u6e90\u7801")
 
 class ControlsContractTests(unittest.TestCase):
     def test_extension_starts_before_first_page_paint_and_has_boot_mask(self):
@@ -15,7 +19,10 @@ class ControlsContractTests(unittest.TestCase):
         self.assertIn("wr-hh-boot-ready", css)
 
     def test_handheld_buttons_have_one_menu_and_scroll_mapping(self):
-        for path in (ROOT / "launcher/weread.gptk", HANDOFF / "weread.gptk"):
+        candidates = [ROOT / "launcher/weread.gptk"]
+        if (HANDOFF / "weread.gptk").is_file():
+            candidates.append(HANDOFF / "weread.gptk")
+        for path in candidates:
             text = path.read_text(encoding="utf-8")
             self.assertRegex(text, r"(?m)^start\s*=\s*f10\s*$")
             self.assertRegex(text, r"(?m)^back\s*=\s*f9\s*$")

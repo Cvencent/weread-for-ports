@@ -16,7 +16,13 @@ import pathlib
 import re
 import unittest
 
-from playwright.sync_api import sync_playwright
+try:
+    from playwright.sync_api import sync_playwright
+except ImportError as _err:  # optional: only the browser tests need it
+    sync_playwright = None
+    _PLAYWRIGHT_ERROR = _err
+else:
+    _PLAYWRIGHT_ERROR = None
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]

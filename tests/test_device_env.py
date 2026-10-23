@@ -12,7 +12,13 @@ import unittest
 import zipfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
-import device
+try:
+    import device
+except ImportError as err:  # paramiko is only needed for the handheld
+    device = None
+    _DEVICE_IMPORT_ERROR = err
+else:
+    _DEVICE_IMPORT_ERROR = None
 from test_source_package import build_package
 
 
@@ -20,6 +26,10 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 
 
 class LocalEnvTests(unittest.TestCase):
+    def setUp(self):
+        if device is None:
+            self.skipTest("device helpers unavailable: %s" % _DEVICE_IMPORT_ERROR)
+
     def write(self, text):
         handle = tempfile.NamedTemporaryFile("w", suffix=".env", delete=False,
                                              encoding="utf-8", newline="\n")
