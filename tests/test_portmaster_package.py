@@ -47,7 +47,7 @@ class PortMasterPackageTests(unittest.TestCase):
 
     def test_the_package_validates_the_way_portmaster_does(self):
         # Raises on any breach, so the assertion is simply that it returns.
-        self.pkg.validate(self.pkg.ARCHIVE)
+        self.pkg.validate(self.archive)
 
     def test_the_zip_is_flat_with_a_launcher_and_a_directory(self):
         self.assertIn("Weread.sh", self.names)
