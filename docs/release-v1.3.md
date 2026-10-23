@@ -29,8 +29,8 @@ weread/browser/
 └── MANIFEST.json       每个文件的 SHA-256，装机后可校验
 ```
 
-体积：解压后约 500MB（已去掉 326 个用不到的语言包、chromedriver 和
-crashpad handler，省下约 240MB）。
+体积：解压后约 605MB，打包后 194.4MB（已去掉 326 个用不到的语言包、
+chromedriver 和 crashpad handler，省下约 240MB）。
 
 启动器现在默认在**自己旁边**找浏览器：
 
@@ -88,7 +88,7 @@ curl -fsSL https://github.com/Cvencent/weread-for-ports/releases/latest/download
 
 | 文件 | 大小 | 适合谁 |
 | --- | --- | --- |
-| `weread.zip` | 约 210MB（下载） | **所有人**。自带浏览器，装完即用 |
+| `weread.zip` | 194.4MB（下载） | **所有人**。自带浏览器，装完即用 |
 | `weread-lite.zip` | 约 100KB | 已经装了 Browser port、想省空间的人 |
 
 `weread-lite.zip` 需要在 PortMaster 里另外装 Browser port，并可用
@@ -137,8 +137,8 @@ PortMaster 的安装流程（`harbourmaster/hm_install.py`）只做两件事：�
   卸载、缺浏览器时报错退出）。
 - `tests/test_release_zip_verifier.py`（5 项）+ `tests/verify_release_zip.py`：发布前的解包级校验。
 
-全量套件 275 项通过，0 失败（另有 6 项需要真机的 `test_discovery` 因掌机离线跳过，
-与本次改动无关）。
+全量套件 279 项通过、0 失败（25 项跳过：需要真机的 `test_discovery` 因掌机离线，
+以及只有装了 playwright 才会跑的浏览器测试）。
 
 ## 已验证 / 未验证
 

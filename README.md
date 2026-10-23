@@ -47,7 +47,7 @@ Ports/EmulationStation 平台，不绑定 X35S，后续可继续适配其他掌�
 | 已验证设备 | Powkiddy X35S，640x480，纯手柄（RK3566 / Mali-G52） |
 | 渲染后端 | Mali-G52 硬件渲染（ANGLE / Vulkan），已真机验证 |
 | 其他 Ports 掌机 | 架构上可复用，尚未逐台验证；R36S 的差异见下方说明 |
-| Chromium | **已打进 `weread.zip`**（Chromium 154.0.8037.97，约 500MB），装完即用 |
+| Chromium | **已打进 `weread.zip`**（Chromium 154.0.8037.97，解压后约 605MB），装完即用 |
 | 扩展样式 | 当前只加载 `extension/shell.css` |
 | 旧样式 | `extension/legacy/style.css` 仅保留作历史参考，不会被加载 |
 
@@ -90,7 +90,7 @@ curl -fsSL https://github.com/Cvencent/weread-for-ports/releases/latest/download
 
 **第 1 步**：下载安装包
 
-在电脑浏览器里打开，会自动下载 `weread.zip`（约 210MB）：
+在电脑浏览器里打开，会自动下载 `weread.zip`（约 194MB）：
 
 ```text
 https://github.com/Cvencent/weread-for-ports/releases/latest/download/weread.zip
