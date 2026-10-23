@@ -41,6 +41,11 @@ INSTALLED = [
     "weread/ext/manifest.json",
     "weread/ext/background-v8.1.js",
     "weread/ext/telemetry-rules.json",
+    # v1.3 ships its own browser so a novice never installs a second package.
+    "weread/browser/chromium/chrome",
+    "weread/browser/nss/libnss3.so",
+    "weread/browser/fonts/NotoSansSC-Regular.otf",
+    "weread/browser/MANIFEST.json",
 ]
 
 failures = []

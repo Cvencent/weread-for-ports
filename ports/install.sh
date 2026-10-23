@@ -3,19 +3,27 @@
 # Ports library, the same way every other port is laid out: a weread/ folder
 # plus a Weread.sh launcher that EmulationStation discovers on its own.
 #
-# The Chromium binary belongs to the Browser port and the login profile belongs
-# to the user; this script borrows both and never ships or replaces them.
+# The browser ships inside that directory too (weread/browser): a novice runs
+# this script or installs weread.zip and needs nothing else. The login profile
+# belongs to the user and is never touched.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 PORTS_DIR="${PORTS_DIR:-/storage/roms/ports}"
 WEREAD_DIR="$PORTS_DIR/weread"
-BROWSER_DIR="${WEREAD_BROWSER_DIR:-$PORTS_DIR/browser}"
+# Our own Chromium payload. Build it with tools/build_browser_payload.py, or
+# point WEREAD_BROWSER_SRC at an existing extraction.
+BROWSER_SRC="${WEREAD_BROWSER_SRC:-${WEREAD_BROWSER_DIR:-$ROOT/output/browser_payload}}"
 
-# WeRead renders inside the Browser port's Chromium; refuse to install without it.
-if [ ! -x "$BROWSER_DIR/chromium/chrome" ]; then
-  echo "❌ Chromium not found at $BROWSER_DIR/chromium/chrome" >&2
-  echo "   Install the Browser port first, then run install.sh again." >&2
+# Fail before touching an existing install: a half-copied browser is worse than
+# no install, because the launcher would start and then die.
+if [ ! -x "$BROWSER_SRC/chromium/chrome" ]; then
+  echo "❌ 没有找到自带的浏览器：$BROWSER_SRC/chromium/chrome" >&2
+  echo "   先运行：python tools/build_browser_payload.py" >&2
+  exit 1
+fi
+if [ ! -f "$BROWSER_SRC/nss/libnss3.so" ]; then
+  echo "❌ 浏览器包不完整，缺少 $BROWSER_SRC/nss/libnss3.so" >&2
   exit 1
 fi
 
@@ -43,12 +51,18 @@ cp "$ROOT/ports/media/Weread.png" "$WEREAD_DIR/Weread.png"
 cp "$ROOT/ports/update_gamelist.py" "$WEREAD_DIR/update_gamelist.py"
 cp "$ROOT/ports/gamelist.fragment.xml" "$WEREAD_DIR/gamelist.fragment.xml"
 
+# The browser travels with the port so nothing else has to be installed first.
+cp -a "$BROWSER_SRC" "$WEREAD_DIR/browser"
+
 # Permissions in a few passes instead of a line per file.
 find "$WEREAD_DIR" -type f -name '*.py' -exec chmod 755 {} +
 chmod 755 "$WEREAD_DIR/node.sh" "$PORTS_DIR/Weread.sh"
 find "$WEREAD_DIR" -maxdepth 1 -type f ! -name '*.py' ! -name node.sh \
   -exec chmod 644 {} +
 find "$WEREAD_DIR/ext" -type f -exec chmod 644 {} +
+# Keep the browser executable: chrome and every shared object it loads.
+find "$WEREAD_DIR/browser" -type f \( -name 'chrome' -o -name '*.so' -o -name '*.so.*' \) \
+  -exec chmod 755 {} +
 
 # EmulationStation finds Weread.sh on its own; this only adds a curated
 # Chinese-named entry with the icon, preserving everything else in the file.
@@ -60,4 +74,4 @@ if [ "${WEREAD_GAMELIST:-1}" = 1 ]; then
     --fragment "$ROOT/ports/gamelist.fragment.xml"
 fi
 
-echo "WeRead installed -> $PORTS_DIR/Weread.sh (Chromium and login profile preserved)"
+echo "WeRead installed -> $PORTS_DIR/Weread.sh (登录资料保留)"

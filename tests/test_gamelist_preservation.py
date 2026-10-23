@@ -105,12 +105,15 @@ class InstallRoundTripTests(unittest.TestCase):
         self.gamelist = self.ports / "gamelist.xml"
         self.ports.mkdir(parents=True)
         self.gamelist.write_bytes(CURATED)
-        # install.sh requires the borrowed Chromium the Browser port provides;
-        # an executable stub is enough to exercise the rest of the script here.
+        # install.sh now copies its own browser payload, so the fixture has to
+        # look like one: a chrome stub plus one NSS library.
         chrome = self.ports / "browser" / "chromium" / "chrome"
         chrome.parent.mkdir(parents=True)
         chrome.write_text("#!/bin/sh\n", encoding="utf-8")
         chrome.chmod(0o755)
+        nss = self.ports / "browser" / "nss" / "libnss3.so"
+        nss.parent.mkdir(parents=True)
+        nss.write_bytes(b"so")
         # Git Bash needs POSIX-style paths; the interpreter comes from the
         # tests' own environment, so ask python for a path Bash can use.
         self.mount = Path(self.bash).parent.parent

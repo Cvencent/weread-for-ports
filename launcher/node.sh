@@ -43,9 +43,10 @@ CDP_TOOL="$HERE/cdp.py"
 GPTK="$HERE/weread.gptk"
 COVER_SRC="$HERE/Weread.png"
 MEDIA_DIR="$PORTS_DIR/media"
-# Browser port's Chromium. Derived from where this port actually lives
-# so it keeps working on systems whose ports folder is not /storage/roms.
-BROWSER_DIR="${WEREAD_BROWSER_DIR:-$PORTS_DIR/browser}"
+# Our own Chromium ships inside this directory (weread/browser), so a novice
+# installs one package and is done. The override is kept for anyone pointing
+# at a shared Browser port or a different Chromium build.
+BROWSER_DIR="${WEREAD_BROWSER_DIR:-$HERE/browser}"
 GAMELIST="$PORTS_DIR/gamelist.xml"
 
 # ---------------- 单实例锁 ----------------
@@ -70,6 +71,58 @@ bootstrap_port() {
 }
 bootstrap_port
 
+# ---------------- 浏览器可执行位 ----------------
+# PortMaster 用 Python 的 zipfile 解压，不会还原 unix 权限；而它只在 ext4 上
+# 统一 chmod（本机 ports 在 exFAT 上，直接跳过）。所以装完 chrome 可能是 644，
+# 启动器自己补上可执行位；只读文件系统也不要影响启动。
+ensure_browser_exec() {
+  local chrome="$BROWSER_DIR/chromium/chrome"
+  [ -f "$chrome" ] || return 0
+  [ -x "$chrome" ] && return 0
+  chmod 755 "$chrome" 2>/dev/null || true
+  local so
+  for so in "$BROWSER_DIR"/nss/*.so* "$BROWSER_DIR"/chromium/*.so*; do
+    [ -f "$so" ] || continue
+    chmod 755 "$so" 2>/dev/null || true
+  done
+  return 0
+}
+ensure_browser_exec || true
+
+# ---------------- 中文字体 ----------------
+# 本机系统字体里没有 CJK 字形，不注册就会全是方块。浏览器自带 Noto Sans SC，
+# 这里写一个 fontconfig 的 conf.d 片段把它接进去。
+# 用 conf.d 而不是直接改 fonts.conf：fontconfig 会自动读取 conf.d/*.conf，
+# 别人的配置不会被覆盖；任何一步失败都不影响启动。
+setup_cjk_font() {
+  local fonts_dir="$BROWSER_DIR/fonts"
+  [ -d "$fonts_dir" ] || return 0
+  local conf_dir="/storage/.config/fontconfig/conf.d"
+  local conf="$conf_dir/99-weread-cjk.conf"
+  mkdir -p "$conf_dir" 2>/dev/null || return 0
+  cat > "$conf" 2>/dev/null <<CONF || true
+<?xml version="1.0"?>
+<!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+<fontconfig>
+  <dir>${fonts_dir}</dir>
+  <match target="pattern">
+    <test qual="any" name="family"><string>PingFang SC</string></test>
+    <edit name="family" mode="assign" binding="strong"><string>Noto Sans SC</string></edit>
+  </match>
+  <match target="pattern">
+    <test qual="any" name="family"><string>Microsoft YaHei</string></test>
+    <edit name="family" mode="assign" binding="strong"><string>Noto Sans SC</string></edit>
+  </match>
+  <match target="pattern">
+    <test qual="any" name="family"><string>sans-serif</string></test>
+    <edit name="family" mode="prepend" binding="strong"><string>Noto Sans SC</string></edit>
+  </match>
+</fontconfig>
+CONF
+  return 0
+}
+setup_cjk_font || true
+
 acquire_lock() {
   local tries=0
   while ! mkdir "$LOCKDIR" 2>/dev/null; do
@@ -92,7 +145,7 @@ echo $$ > "$PIDFILE"
 # ---------------- 自检 ----------------
 selfcheck() {
   local bad=0
-  [ -x "$BROWSER_DIR/chromium/chrome" ] || { echo "❌ chrome 缺失"; bad=1; }
+  [ -x "$BROWSER_DIR/chromium/chrome" ] || { echo "❌ 浏览器缺失：没找到 $BROWSER_DIR/chromium/chrome（重新安装 weread.zip 即可）"; bad=1; }
   [ -f "$EXT/content.js" ]       || { echo "❌ 扩展缺失"; bad=1; }
   [ -f "$GPTK" ]                 || { echo "❌ 手柄映射缺失"; bad=1; }
   [ -f "$WINDOW_GUARD" ]        || { echo "[weread] window guard missing"; bad=1; }

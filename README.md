@@ -1,6 +1,7 @@
 # WeRead for Ports / 微信读书 Ports 平台适配方案
 
-> 当前发布：**v1.2**（2026-10-12），发布说明见 [`docs/release-v1.2.md`](docs/release-v1.2.md)。
+> 当前发布：**v1.3**（2026-10-23），发布说明见 [`docs/release-v1.3.md`](docs/release-v1.3.md)。
+> v1.3 起 **weread.zip 自带 Chromium**，不用再另外装浏览器。
 
 
 把微信读书网页版封装成适合 **Ports 掌机**使用的无触屏阅读客户端。项目当前已在
@@ -42,11 +43,11 @@ Ports/EmulationStation 平台，不绑定 X35S，后续可继续适配其他掌�
 | 项目 | 状态 |
 | --- | --- |
 | 目标平台 | Ports / EmulationStation |
-| 安装方式 | PortMaster 一键安装（`weread.zip`），`install.sh` 作为备选 |
+| 安装方式 | PortMaster 装 `weread.zip`；或一条命令 `install-agent.sh`（给 AI Agent 用） |
 | 已验证设备 | Powkiddy X35S，640x480，纯手柄（RK3566 / Mali-G52） |
 | 渲染后端 | Mali-G52 硬件渲染（ANGLE / Vulkan），已真机验证 |
 | 其他 Ports 掌机 | 架构上可复用，尚未逐台验证；R36S 的差异见下方说明 |
-| Chromium | 需要单独安装，仓库不包含约 500MB 的浏览器运行文件 |
+| Chromium | **已打进 `weread.zip`**（Chromium 154.0.8037.97，约 500MB），装完即用 |
 | 扩展样式 | 当前只加载 `extension/shell.css` |
 | 旧样式 | `extension/legacy/style.css` 仅保留作历史参考，不会被加载 |
 
@@ -64,114 +65,96 @@ screenshots/           脱敏后的真机界面截图
 
 ## 安装到 Ports 掌机
 
-一句话：**下载 `weread.zip`，在 PortMaster 里装一下**。不需要 SSH，不需要在掌机上敲
-任何命令。
+**结论：只装一个 `weread.zip` 就行，不用装浏览器，不用敲命令。**
 
-### 1. 下载 `weread.zip`
+下面两条路，选一条。
 
-从 GitHub Releases 下载（最新 v1.2）：
+### 路线 A：一条命令（推荐给 AI Agent / 会用终端的人）
+
+把这一行整行复制给 AI Agent，或者粘到掌机的终端里：
+
+```bash
+curl -fsSL https://github.com/Cvencent/weread-for-ports/releases/latest/download/install-agent.sh | bash
+```
+
+它会自己完成全部事情：下载 → 校验 SHA-256 → 解压 → 安装 → 自检，最后打印中文结果。
+不需要回答任何问题，也不需要提前装 Chromium。
+
+卸载（同样一条命令）：
+
+```bash
+curl -fsSL https://github.com/Cvencent/weread-for-ports/releases/latest/download/install-agent.sh | bash -s -- --uninstall
+```
+
+### 路线 B：完全不用命令（推荐给纯小白）
+
+**第 1 步**：下载安装包
+
+在电脑浏览器里打开，会自动下载 `weread.zip`（约 210MB）：
 
 ```text
-https://github.com/Cvencent/weread-for-ports/releases/download/v1.2/weread.zip
+https://github.com/Cvencent/weread-for-ports/releases/latest/download/weread.zip
 ```
 
-约 98KB。同目录下还有 `weread.zip.sha256`，可选校验：
+**第 2 步**：把这一个文件放进掌机的 autoinstall 目录
 
-```sh
-sha256sum weread.zip          # 对比 weread.zip.sha256 里的值
-```
-
-### 2. 用 PortMaster 安装（三条路径，任选其一）
-
-| 路径 | 怎么做 | 适合谁 |
-| --- | --- | --- |
-| **界面里从文件安装** | 把 `weread.zip` 放到掌机能读到的位置（U 盘 / 共享 / 下载目录），在 PortMaster 里选这个 zip 安装 | 绝大多数用户 |
-| **autoinstall 自动安装** | 把 `weread.zip` 放进 `/storage/roms/ports/PortMaster/autoinstall/`，下次启动 PortMaster 会弹出「Auto-installation」确认框，点 Install | 批量部署、换机 |
-| **官方目录一键装** | `weread.zip` 挂在 GitHub Release 并登记进 PortMaster 官方端口目录，用户在 PortMaster 列表里搜「微信读书」直接装 | 商店式体验 |
-
-三条路径安装的是同一个 `weread.zip`；PortMaster 只是把它解压到 ports 目录，
-之后由 EmulationStation 直接运行解压出来的 `Weread.sh`。
-
-### 3. 前置条件：Chromium
-
-微信读书复用 Browser port 的 Chromium（约 500MB），**本仓库不包含它**。装之前确认设备上
-存在：
+把 `weread.zip` 拷到掌机 TF 卡的这个位置（没有这个文件夹就自己新建）：
 
 ```text
-/storage/roms/ports/browser/chromium/chrome
-/storage/roms/ports/browser/nss/
+/storage/roms/ports/PortMaster/autoinstall/
 ```
 
-启动器要求 `.../chromium/chrome` 存在且可执行，并要求 PortMaster 提供的 `gptokeyb`
-可用。不同系统的目录可能不同，可通过环境变量覆盖：
+**第 3 步**：在掌机上点一下
 
-```sh
-export WEREAD_BROWSER_DIR=/storage/roms/ports/browser
-```
+在掌机前端运行 **PortMaster**，它会弹出 `Auto-installation` 确认框，选 **Install**。
 
-没有 Chromium 就先在 PortMaster 里装 Browser port。
+**第 4 步**：完事
 
-### 4. 安装后的样子
+回到前端 ports 列表，会多出中文名的「**微信读书**」，点进去就能用。
+第一次启动要 20~30 秒（要解压自带的浏览器），属正常。
 
-PortMaster 把 zip 解成「一个自包含目录 + 一个顶层启动器」，和 Browser、Celeste 等
-port 完全一致：
+### 装完是什么样
 
 ```text
 /storage/roms/ports/
-  Weread.sh              ← 顶层启动器，EmulationStation 自动发现
+  Weread.sh              ← 前端入口
   weread/                ← 微信读书全部文件（自包含）
-    port.json            ← PortMaster v2 元数据（标题/描述/分类/封面）
     node.sh  window_guard.py  input_bridge.py  cdp.py  weread.gptk
-    Weread.png  update_gamelist.py  gamelist.fragment.xml  操作说明.txt
-    ext/  content.js  shell.css  manifest.json  background-v8.1.js
-         telemetry-rules.json
+    ext/                 ← 手柄适配扩展
+    browser/             ← 自带浏览器（Chromium + NSS + 中文字体）
+       MANIFEST.json     ← 每个文件的 SHA-256
 ```
 
-**首次启动时 `node.sh` 会自动补齐两件事**，都幂等、都不碰登录资料：
+首次启动会自动做三件幂等的事，都不碰登录资料：
 
-1. 把封面发布到共享的 `/storage/roms/ports/media/Weread.png`；
-2. 用 `update_gamelist.py` 把中文条目写进 `gamelist.xml`。
+1. 把封面发布到 `/storage/roms/ports/media/Weread.png`；
+2. 用 `update_gamelist.py` 写入中文条目「微信读书」；
+3. 写 `/storage/.config/fontconfig/conf.d/99-weread-cjk.conf` 注册中文字体。
 
-所以装完不用手动配置，列表里就会出现：
+### 两条命令装不了 / 想省空间？
 
-- 名称：`微信读书`
-- 描述：支持手柄导航、书架与发现、阅读翻页、目录、搜索和字号设置
-- 分类：`阅读工具`
-- 封面：`./media/Weread.png`
+*已经装过 Browser port* 的人可以改用精简包 `weread-lite.zip`（约 100KB），
+它在 PortMaster 里正常安装，但不带浏览器；若 Browser port 不在默认路径，
+可以设 `WEREAD_BROWSER_DIR` 指过去。
 
-### 5. 更新
+### 更新 / 卸载
 
-因为所有自有文件都在 `weread/` 一个目录里，**更新就是把整个 `weread/` 目录换掉**
-（外加顶层 `Weread.sh`）。登录态在 `/storage/.config/weread-profile`，不受影响。
+- **更新**：重新装一遍新版 `weread.zip` 即可，整目录替换，登录资料不受影响。
+- **卸载**：在 PortMaster 里 Uninstall，或执行 `bash ports/uninstall.sh`。
+  两者都只删 `weread/`、`Weread.sh` 和封面，**登录资料与浏览器保留**。
 
-在 PortMaster 里对该条目重新安装新版本的 zip 即可。
-
-### 6. 卸载
-
-在 PortMaster 里对该条目 Uninstall，或从 SSH 执行：
+### 备选：SSH 直接从源码装（开发者）
 
 ```sh
-bash ports/uninstall.sh
-```
-
-两者都只删除 `weread/` 目录、`Weread.sh` 和封面，保留登录资料和 Chromium。
-
-### 7. 备选：SSH 安装脚本
-
-没有 PortMaster、或需要批量部署时，仍可在仓库根目录执行：
-
-```sh
+python tools/build_browser_payload.py   # 先准备自带浏览器（约 500MB）
 bash ports/install.sh
 ```
 
-脚本落地的是同一套文件、同一套目录布局，额外做借用的 Chromium 存在性检查，
-缺失即拒绝安装；gamelist 编辑可用 `WEREAD_GAMELIST=0` 关闭。
-
-如果系统使用 `essway.service`，在应用文件安装完成后从外部 SSH 重启前端：
+`install.sh` 落地的是同一套目录，`WEREAD_GAMELIST=0` 可跳过列表编辑。
+若系统使用 `essway.service`，装完从外部 SSH 重启前端：
 
 ```sh
 systemctl restart essway.service
-systemctl is-active essway.service
 ```
 
 不要在由 `node.sh` 启动的进程内部停止 `essway.service`；它是启动器的父服务。

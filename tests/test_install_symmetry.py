@@ -35,8 +35,12 @@ class InstallSymmetryTests(unittest.TestCase):
         self.assertNotIn("WEREAD_EXT_DIR", self.install)
         self.assertNotIn('"$BROWSER_DIR/cdp.py"', self.install)
         self.assertNotIn('"$BROWSER_DIR/weread.gptk"', self.install)
-        # install may name the browser dir only to require the borrowed binary.
-        self.assertIn('[ ! -x "$BROWSER_DIR/chromium/chrome" ]', self.install)
+
+    def test_install_ships_its_own_browser_instead_of_borrowing_one(self):
+        # v1.3: a novice installs one thing. install.sh carries the bundled
+        # Chromium payload into weread/browser/ just like weread.zip does.
+        self.assertIn("BROWSER_SRC=", self.install)
+        self.assertIn('"$WEREAD_DIR/browser"', self.install)
 
     def test_uninstall_removes_exactly_what_install_wrote(self):
         self.assertIn('rm -f "$PORTS_DIR/Weread.sh" "$PORTS_DIR/media/Weread.png"',

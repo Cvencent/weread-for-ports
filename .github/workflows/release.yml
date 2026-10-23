@@ -1,0 +1,73 @@
+name: release
+
+# Build the self-contained weread.zip and publish it.
+#
+# The package carries Chromium 154 + NSS + a CJK font (~500MB extracted), which
+# is exactly why this runs here: a runner has the bandwidth to fetch the payload
+# reliably, and the artifact is reproducible from pinned URLs and SHA-256s.
+on:
+  push:
+    tags: ['v*']
+  # Manual runs build and verify the packages, but only a pushed tag publishes
+  # a release: without a tag there is nothing for the release step to attach to.
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Set to "yes" to publish a release (requires a tag ref)'
+        required: false
+        default: 'no'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Run the test suite
+        run: python -m unittest discover -s tests -p 'test_*.py'
+
+      - name: Fetch and assemble the browser payload
+        run: python tools/build_browser_payload.py
+
+      - name: Report the payload size
+        run: du -sh output/browser_payload
+
+      - name: Build the full package and the lightweight one
+        run: |
+          # Default output is output/weread.zip; --lite writes output/weread-lite.zip.
+          python tests/package_portmaster.py
+          cp output/weread.zip output/weread-full.zip
+          python tests/package_portmaster.py --lite
+          ls -la output/*.zip
+
+      - name: Verify both packages unpack into a working tree
+        run: |
+          python tests/verify_release_zip.py output/weread-full.zip
+          python tests/verify_release_zip.py --lite output/weread-lite.zip
+
+      - name: Write checksums
+        run: |
+          cd output
+          mv weread-full.zip weread.zip
+          sha256sum weread.zip > weread.zip.sha256
+          sha256sum weread-lite.zip > weread-lite.zip.sha256
+          cat weread.zip.sha256
+
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event.inputs.publish == 'yes'
+        with:
+          tag_name: ${{ github.ref_name }}
+          body_path: docs/release-v1.3.md
+          files: |
+            output/weread.zip
+            output/weread.zip.sha256
+            output/weread-lite.zip
+            output/weread-lite.zip.sha256
+            ports/install-agent.sh
